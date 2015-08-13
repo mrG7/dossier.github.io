@@ -1,0 +1,443 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.models.soft_selectors &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.models.soft_selectors</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;Algorithmically determine soft selector strings.</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2012-2014 Diffeo, Inc.</span>
+
+<span class="sd">Soft selectors</span>
+<span class="sd">==============</span>
+<span class="sd">.. autofunction:: find_soft_selectors</span>
+<span class="sd">.. autofunction:: make_ngram_corpus</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
+<span class="kn">import</span> <span class="nn">string</span>
+
+<span class="kn">import</span> <span class="nn">dblogger</span>
+<span class="kn">from</span> <span class="nn">gensim</span> <span class="kn">import</span> <span class="n">corpora</span>
+<span class="kn">import</span> <span class="nn">many_stop_words</span>
+<span class="kn">from</span> <span class="nn">nltk.tokenize</span> <span class="kn">import</span> <span class="n">RegexpTokenizer</span>
+<span class="kn">from</span> <span class="nn">nltk.util</span> <span class="kn">import</span> <span class="n">ngrams</span>
+<span class="kn">import</span> <span class="nn">regex</span> <span class="kn">as</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">streamcorpus</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline._clean_html</span> <span class="kn">import</span> <span class="n">clean_html</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline._clean_visible</span> <span class="kn">import</span> <span class="n">clean_visible</span>
+<span class="kn">import</span> <span class="nn">yakonfig</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+<span class="n">stop_words</span> <span class="o">=</span> <span class="n">many_stop_words</span><span class="o">.</span><span class="n">get_stop_words</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="find_soft_selectors"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.soft_selectors.find_soft_selectors">[docs]</a><span class="k">def</span> <span class="nf">find_soft_selectors</span><span class="p">(</span><span class="n">ids_and_clean_visible</span><span class="p">,</span> <span class="n">start_num_tokens</span><span class="o">=</span><span class="s">&#39;10&#39;</span><span class="p">,</span>
+                        <span class="n">max_num_tokens</span><span class="o">=</span><span class="s">&#39;20&#39;</span><span class="p">,</span> <span class="n">filter_punctuation</span><span class="o">=</span><span class="s">&#39;0&#39;</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;External interface for dossier.models.soft_selectors.</span>
+
+<span class="sd">    This at scans through `num_tokens` values between</span>
+<span class="sd">    `start_num_tokens` and `max_num_tokens` and calls</span>
+<span class="sd">    `find_soft_selectors_at_n` looking for results</span>
+
+<span class="sd">    All of the params can be passed from URL parameters, in which</span>
+<span class="sd">    case they can be strings and this function will type cast them</span>
+<span class="sd">    appropriately.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">start_num_tokens</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">start_num_tokens</span><span class="p">)</span>
+    <span class="n">max_num_tokens</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_num_tokens</span><span class="p">)</span>
+    <span class="n">filter_punctuation</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">filter_punctuation</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ids_and_clean_visible</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;find_soft_selectors called with no ids_and_clean_visible&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">current_results</span> <span class="o">=</span> <span class="p">[]</span> <span class="c">## results from current n</span>
+    <span class="n">previous_results</span> <span class="o">=</span> <span class="p">[]</span> <span class="c">## previous results from last n</span>
+    <span class="n">overall_results</span> <span class="o">=</span> <span class="p">[]</span> <span class="c">## overall results to return</span>
+
+    <span class="k">for</span> <span class="n">num_tokens</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start_num_tokens</span><span class="p">,</span> <span class="n">max_num_tokens</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+
+        <span class="c">## update this here</span>
+        <span class="n">previous_results</span> <span class="o">=</span> <span class="n">current_results</span>
+
+        <span class="n">results_at_n</span> <span class="o">=</span> <span class="n">find_soft_selectors_at_n</span><span class="p">(</span>
+            <span class="n">ids_and_clean_visible</span><span class="p">,</span> <span class="n">num_tokens</span><span class="p">,</span> <span class="n">filter_punctuation</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">results_at_n</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="n">best_score</span> <span class="o">=</span> <span class="n">results_at_n</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s">&#39;score&#39;</span><span class="p">]</span>
+
+        <span class="c">## i.e. the initial condition is they all have the same score</span>
+        <span class="n">idx_at_second</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">results_at_n</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">results_at_n</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s">&#39;score&#39;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">best_score</span><span class="p">:</span>
+                <span class="n">idx_at_second</span> <span class="o">=</span> <span class="n">idx</span>
+                <span class="k">break</span>
+
+        <span class="n">current_results</span> <span class="o">=</span> <span class="n">results_at_n</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">idx_at_second</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">num_tokens</span> <span class="o">==</span> <span class="mi">8</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results_at_n</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> --- score: </span><span class="si">%d</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s">&#39;phrase&#39;</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="s">&#39;score&#39;</span><span class="p">]))</span>
+
+        <span class="k">if</span> <span class="n">previous_results</span> <span class="o">==</span> <span class="p">[]:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Previous results are empty. Continuing.&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="c">## now, the main idea is to figure out if any strings from previous</span>
+        <span class="c">## are substrings of those from current</span>
+        <span class="c">## (with the scores fixed at the max for that subphrase).</span>
+        <span class="c">## when they stop being substrings</span>
+        <span class="c">## then those are completed phrases and should be returned as a result</span>
+
+        <span class="k">for</span> <span class="n">prev_result</span> <span class="ow">in</span> <span class="n">previous_results</span><span class="p">:</span>
+
+            <span class="n">is_subbed_and_same_score</span> <span class="o">=</span> <span class="bp">False</span>
+
+            <span class="k">for</span> <span class="n">curr_result</span> <span class="ow">in</span> <span class="n">current_results</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">prev_result</span><span class="p">[</span><span class="s">&#39;phrase&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">curr_result</span><span class="p">[</span><span class="s">&#39;phrase&#39;</span><span class="p">]</span> <span class="ow">and</span> \
+                    <span class="n">prev_result</span><span class="p">[</span><span class="s">&#39;score&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">curr_result</span><span class="p">[</span><span class="s">&#39;score&#39;</span><span class="p">]</span> <span class="p">:</span>
+
+                    <span class="n">is_subbed_and_same_score</span> <span class="o">=</span> <span class="bp">True</span>
+                    <span class="k">break</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">is_subbed_and_same_score</span><span class="p">:</span> <span class="c">## then it&#39;s a honest result</span>
+                <span class="n">prev_result</span><span class="p">[</span><span class="s">&#39;n&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">num_tokens</span> <span class="o">-</span> <span class="mi">1</span>
+
+                <span class="n">overall_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">prev_result</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_results</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c">## we got them all</span>
+            <span class="c">## (we still had to collect the previous results)</span>
+            <span class="c">## that&#39;s why this break comes after the previous for loop</span>
+            <span class="k">break</span>
+
+
+    <span class="c">## also add results from current_results at final n</span>
+    <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">current_results</span><span class="p">:</span>
+        <span class="n">result</span><span class="p">[</span><span class="s">&#39;n&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">num_tokens</span>
+        <span class="n">overall_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+
+    <span class="c">## sort by score then by length</span>
+    <span class="n">overall_results</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="s">&#39;score&#39;</span><span class="p">,</span> <span class="s">&#39;n&#39;</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;OVERALL RESULTS: </span><span class="si">%d</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">overall_results</span><span class="p">))</span>
+    <span class="c"># for idx, result in enumerate(overall_results):</span>
+        <span class="c"># logger.info(&#39;%d. %s --- score: %f , n = %d, hits=%d&#39; %</span>
+            <span class="c"># (idx, result[&#39;phrase&#39;], result[&#39;score&#39;], result[&#39;n&#39;], len(result[&#39;hits&#39;]))</span>
+        <span class="c"># )</span>
+    <span class="k">return</span> <span class="n">overall_results</span>
+</div>
+<span class="k">def</span> <span class="nf">find_soft_selectors_at_n</span><span class="p">(</span><span class="n">ids_and_clean_visible</span><span class="p">,</span> <span class="n">num_tokens</span><span class="p">,</span>
+                             <span class="n">filter_punctuation</span><span class="p">):</span>
+    <span class="n">corpus_clean_visibles</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">ids_and_clean_visible</span><span class="p">)</span>
+    <span class="n">corpus_cids</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">ids_and_clean_visible</span><span class="p">)</span>
+
+    <span class="n">corpus_strings</span> <span class="o">=</span> <span class="n">make_ngram_corpus</span><span class="p">(</span>
+        <span class="n">corpus_clean_visibles</span><span class="p">,</span> <span class="n">num_tokens</span><span class="p">,</span> <span class="n">filter_punctuation</span><span class="p">)</span>
+
+
+    <span class="c">## make dictionary</span>
+    <span class="n">dictionary</span> <span class="o">=</span> <span class="n">corpora</span><span class="o">.</span><span class="n">Dictionary</span><span class="p">(</span><span class="n">corpus_strings</span><span class="p">)</span>
+
+    <span class="c">## make word vectors</span>
+    <span class="n">corpus</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">dictionary</span><span class="o">.</span><span class="n">doc2bow</span><span class="p">,</span> <span class="n">corpus_strings</span><span class="p">)</span>
+
+    <span class="c"># ## train tfidf model</span>
+    <span class="c"># tfidf = models.TfidfModel(corpus)</span>
+
+    <span class="c"># ## transform coprus</span>
+    <span class="c"># corpus_tfidf = tfidf[corpus]</span>
+
+    <span class="c">## ignore tfidf</span>
+    <span class="n">corpus_tfidf</span> <span class="o">=</span> <span class="n">corpus</span>
+
+    <span class="c">## sum up tf-idf across the entire corpus</span>
+    <span class="n">corpus_total</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">inverted_index</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">set</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">doc_idx</span><span class="p">,</span> <span class="n">doc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">corpus_tfidf</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">word_id</span><span class="p">,</span> <span class="n">score</span> <span class="ow">in</span> <span class="n">doc</span><span class="p">:</span>
+            <span class="c">## uncomment when doing tf idf</span>
+            <span class="c"># corpus_total[word_id] += score</span>
+            <span class="c">## this way we only count once per doc</span>
+            <span class="n">corpus_total</span><span class="p">[</span><span class="n">word_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="n">inverted_index</span><span class="p">[</span><span class="n">word_id</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">corpus_cids</span><span class="p">[</span><span class="n">doc_idx</span><span class="p">])</span>
+
+    <span class="c">## order the phrases by score across the documents</span>
+    <span class="n">corpus_ordered</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="n">corpus_total</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="n">top_phrases</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">word_id</span><span class="p">,</span> <span class="n">score</span> <span class="ow">in</span> <span class="n">corpus_ordered</span><span class="p">:</span>
+        <span class="n">top_phrases</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+            <span class="s">&#39;score&#39;</span><span class="p">:</span> <span class="n">score</span><span class="p">,</span>
+            <span class="s">&#39;phrase&#39;</span><span class="p">:</span> <span class="n">dictionary</span><span class="p">[</span><span class="n">word_id</span><span class="p">],</span>
+            <span class="s">&#39;hits&#39;</span><span class="p">:</span> <span class="p">[{</span><span class="s">&#39;content_id&#39;</span><span class="p">:</span> <span class="n">cid</span><span class="p">,</span> <span class="s">&#39;title&#39;</span><span class="p">:</span> <span class="bp">None</span><span class="p">}</span>
+                     <span class="k">for</span> <span class="n">cid</span> <span class="ow">in</span> <span class="n">inverted_index</span><span class="p">[</span><span class="n">word_id</span><span class="p">]],</span>
+        <span class="p">})</span>
+    <span class="k">return</span> <span class="n">top_phrases</span>
+
+
+<div class="viewcode-block" id="make_ngram_corpus"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.soft_selectors.make_ngram_corpus">[docs]</a><span class="k">def</span> <span class="nf">make_ngram_corpus</span><span class="p">(</span><span class="n">corpus_clean_visibles</span><span class="p">,</span> <span class="n">num_tokens</span><span class="p">,</span> <span class="n">filter_punctuation</span><span class="p">,</span>
+                      <span class="n">zoning_rules</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;takes a list of clean_visible texts, such as from StreamItems or</span>
+<span class="sd">    FCs, tokenizes all the texts, and constructs n-grams using</span>
+<span class="sd">    `num_tokens` sized windows.</span>
+
+<span class="sd">    ``corpus_clean_visibles`` -- list of unicode strings</span>
+<span class="sd">    ``num_tokens`` --- the n of the n-grams</span>
+<span class="sd">    ``filter_punctuation`` --- if True, punctuation is filtered</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="c">## TODO: generatlize this zoning code, so that it works on many</span>
+    <span class="c">## sites in the HT domain; consider finishing streamcorpus-zoner</span>
+    <span class="c">## to do this.</span>
+    <span class="k">if</span> <span class="n">filter_punctuation</span><span class="p">:</span>
+        <span class="c">## word tokenizer that removes punctuation</span>
+        <span class="n">tokenize</span> <span class="o">=</span> <span class="n">RegexpTokenizer</span><span class="p">(</span><span class="s">r&#39;\w+&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">tokenize</span>
+        <span class="n">backpage_string</span> <span class="o">=</span> <span class="s">&#39;backpage&#39;</span>
+        <span class="n">end_string</span> <span class="o">=</span> <span class="s">&#39;Poster&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c">#tokenize = word_tokenize</span>
+        <span class="n">tokenize</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">string</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        <span class="n">backpage_string</span> <span class="o">=</span> <span class="s">&#39;backpage.com&#39;</span>
+        <span class="n">end_string</span> <span class="o">=</span> <span class="s">&#39;Poster</span><span class="se">\&#39;</span><span class="s">s&#39;</span>
+
+    <span class="n">corpus</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">clean_vis</span> <span class="ow">in</span> <span class="n">corpus_clean_visibles</span><span class="p">:</span>
+        <span class="c">## crudely skip pages that have &quot;error&quot;</span>
+        <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">u&#39;error&#39;</span><span class="p">,</span> <span class="n">clean_vis</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">I</span> <span class="o">&amp;</span> <span class="n">re</span><span class="o">.</span><span class="n">UNICODE</span><span class="p">):</span>
+            <span class="k">continue</span>
+
+        <span class="c">## make tokens</span>
+        <span class="n">tokens</span> <span class="o">=</span> <span class="n">tokenize</span><span class="p">(</span><span class="n">clean_vis</span><span class="p">)</span> <span class="c">## already a unicode string</span>
+
+        <span class="k">if</span> <span class="n">zoning_rules</span><span class="p">:</span>
+            <span class="c">## filter out non backpage pages</span>
+            <span class="k">if</span> <span class="n">backpage_string</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c">## string that signals the beginning of the body</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">idx0</span> <span class="o">=</span> <span class="n">tokens</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s">&#39;Reply&#39;</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c">## string that signals the end of the body</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">idx1</span> <span class="o">=</span> <span class="n">tokens</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">end_string</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">tokens</span> <span class="o">=</span> <span class="n">tokens</span><span class="p">[</span><span class="n">idx0</span><span class="p">:</span><span class="n">idx1</span><span class="p">]</span>
+
+        <span class="c">## make ngrams, attach to make strings</span>
+        <span class="n">ngrams_strings</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+
+
+        <span class="k">for</span> <span class="n">ngram_tuple</span> <span class="ow">in</span> <span class="n">ngrams</span><span class="p">(</span><span class="n">tokens</span><span class="p">,</span> <span class="n">num_tokens</span><span class="p">):</span>
+            <span class="c"># ## attempt to remove unwanted phrases</span>
+            <span class="c">## score with many_stop_words and drop bad tuples</span>
+            <span class="c"># stop_count = sum([int(bool(tok.lower() in stop_words))</span>
+            <span class="c">#                   for tok in ngram_tuple])</span>
+            <span class="c"># if stop_count &gt; num_tokens / 1.5:</span>
+            <span class="c">#     continue</span>
+
+            <span class="c">## remove ones with many repeated words</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">ngram_tuple</span><span class="p">))</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">ngram_tuple</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c">## this adds ngrams for the current doc</span>
+            <span class="n">ngrams_strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ngram_tuple</span><span class="p">))</span>
+
+
+        <span class="c">## this adds a list of all the ngrams from the current doc</span>
+        <span class="c">## to the corpus list</span>
+        <span class="n">corpus</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ngrams_strings</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">corpus</span>
+
+</div>
+<span class="k">def</span> <span class="nf">ids_and_clean_visible_from_streamcorpus_chunk_path</span><span class="p">(</span><span class="n">corpus_path</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;converts a streamcorpus.Chunk file into the structure that is</span>
+<span class="sd">    passed by the search engine to find_soft_selectors</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">ch</span> <span class="o">=</span> <span class="n">clean_html</span><span class="p">(</span><span class="n">clean_html</span><span class="o">.</span><span class="n">default_config</span><span class="p">)</span>
+    <span class="n">cv</span> <span class="o">=</span> <span class="n">clean_visible</span><span class="p">(</span><span class="n">clean_visible</span><span class="o">.</span><span class="n">default_config</span><span class="p">)</span>
+    <span class="n">ids_and_clean_visible</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">si</span> <span class="ow">in</span> <span class="n">streamcorpus</span><span class="o">.</span><span class="n">Chunk</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">corpus_path</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">si</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">clean_visible</span><span class="p">:</span>
+            <span class="c">## attempt to make clean_visible</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">si</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">raw</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s">&#39;no raw content, so skipping: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">si</span><span class="o">.</span><span class="n">abs_url</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">abs_url</span> <span class="o">=</span> <span class="n">si</span><span class="o">.</span><span class="n">abs_url</span>
+            <span class="n">si</span> <span class="o">=</span> <span class="n">ch</span><span class="p">(</span><span class="n">si</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">si</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span>
+                    <span class="s">&#39;failed to make clean_html, so skipping: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">abs_url</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">si</span> <span class="o">=</span> <span class="n">cv</span><span class="p">(</span><span class="n">si</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">si</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">si</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">clean_visible</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span>
+                    <span class="s">&#39;failed to make clean_visible, so skipping: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">abs_url</span><span class="p">)</span>
+                <span class="k">continue</span>
+        <span class="n">rec</span> <span class="o">=</span> <span class="p">(</span><span class="n">si</span><span class="o">.</span><span class="n">stream_id</span><span class="p">,</span> <span class="n">si</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">clean_visible</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf8&#39;</span><span class="p">),</span> <span class="p">{})</span>
+        <span class="n">ids_and_clean_visible</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rec</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ids_and_clean_visible</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
+        <span class="s">&#39;command line tool for debugging and development&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;corpus&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s">&#39;path to a streamcorpus.Chunk file&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;-n&#39;</span><span class="p">,</span> <span class="s">&#39;--num-tokens&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s">&#39;the n of the ngrams; used as start_num_tokens &#39;</span>
+                             <span class="s">&#39;for scanning&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--max-num-tokens&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s">&#39;maximum number of `n` in n-grams for scanning&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--peak-score-delta&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s">&#39;delta in score values required between first &#39;</span>
+                             <span class="s">&#39;and second result to stop  scanning&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--scan-window-size&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                        <span class="n">action</span><span class="o">=</span><span class="s">&#39;store_true&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s">&#39;if set, scans from the value of -n until it &#39;</span>
+                             <span class="s">&#39;finds a strongly peaked top value&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--filter-punctuation&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                        <span class="n">action</span><span class="o">=</span><span class="s">&#39;store_true&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s">&#39;filter out punctuation; default is to not &#39;</span>
+                             <span class="s">&#39;filter punctuation&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--show-ids&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s">&#39;store_true&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s">&#39;show identifiers in diagnostic output&#39;</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">parser</span><span class="p">,</span> <span class="p">[</span><span class="n">yakonfig</span><span class="p">,</span> <span class="n">dblogger</span><span class="p">])</span>
+
+    <span class="c">## TODO: if we start needing to load FC chunk files (instead of SI</span>
+    <span class="c">## chunk files), this might need to be told which kind of chunk it</span>
+    <span class="c">## is loading, and we&#39;ll need a second function along the lines of</span>
+    <span class="c">## ids_and_clean_visible_from_streamcorpus_chunk_path</span>
+
+    <span class="c">## mimic the in-process interface:</span>
+    <span class="n">ids_and_clean_visible</span> <span class="o">=</span> <span class="n">ids_and_clean_visible_from_streamcorpus_chunk_path</span><span class="p">(</span>
+        <span class="n">args</span><span class="o">.</span><span class="n">corpus</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;gathered </span><span class="si">%d</span><span class="s"> texts&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids_and_clean_visible</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">format_result</span><span class="p">(</span><span class="n">result</span><span class="p">):</span>
+        <span class="n">score</span><span class="p">,</span> <span class="n">soft_selector_phrase</span><span class="p">,</span> <span class="n">matching_texts</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="s">&#39;</span><span class="si">%.6f</span><span class="se">\t</span><span class="si">%d</span><span class="s"> texts say:</span><span class="se">\t</span><span class="si">%s</span><span class="se">\t</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> \
+            <span class="p">(</span><span class="n">score</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">matching_texts</span><span class="p">),</span> <span class="n">soft_selector_phrase</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf8&#39;</span><span class="p">),</span>
+             <span class="n">args</span><span class="o">.</span><span class="n">show_ids</span> <span class="ow">and</span> <span class="nb">repr</span><span class="p">(</span><span class="n">matching_texts</span><span class="p">)</span> <span class="ow">or</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">scan_window_size</span><span class="p">:</span>
+        <span class="n">best</span> <span class="o">=</span> <span class="n">find_soft_selectors</span><span class="p">(</span>
+            <span class="n">ids_and_clean_visible</span><span class="p">,</span>
+            <span class="n">start_num_tokens</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">num_tokens</span><span class="p">,</span>
+            <span class="n">max_num_tokens</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">max_num_tokens</span><span class="p">,</span>
+            <span class="n">filtered_punctuation</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">filter_punctuation</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">best</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">&#39;failed to find a best result!&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">&#39;found a best result:&#39;</span><span class="p">)</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">format_result</span><span class="p">,</span> <span class="n">best</span><span class="p">)))</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">find_soft_selectors_at_n</span><span class="p">(</span>
+            <span class="n">ids_and_clean_visible</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">num_tokens</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">filter_punctuation</span><span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">format_result</span><span class="p">,</span> <span class="n">results</span><span class="p">)))</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

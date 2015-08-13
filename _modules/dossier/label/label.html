@@ -6,15 +6,15 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>dossier.label.label &mdash; dossier 0.3.0 documentation</title>
+    <title>dossier.label.label &mdash; dossier 0.3.4 documentation</title>
     
-    <link rel="stylesheet" href="../../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
     
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
-        VERSION:     '0.3.0',
+        VERSION:     '0.3.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,8 +23,8 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="dossier 0.3.0 documentation" href="../../../index.html" />
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
     <link rel="up" title="Module code" href="../../index.html" /> 
   </head>
   <body role="document">
@@ -37,8 +37,8 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -51,19 +51,21 @@
 <span class="sd">&#39;&#39;&#39;dossier.label.label</span>
 
 <span class="sd">.. This software is released under an MIT/X11 open source license.</span>
-<span class="sd">   Copyright 2012-2014 Diffeo, Inc.</span>
+<span class="sd">   Copyright 2012-2015 Diffeo, Inc.</span>
 <span class="sd">&#39;&#39;&#39;</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
 
-<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">namedtuple</span>
+<span class="kn">import</span> <span class="nn">cbor</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Container</span><span class="p">,</span> <span class="n">Hashable</span>
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
-<span class="kn">import</span> <span class="nn">functools</span>
-<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">groupby</span><span class="p">,</span> <span class="n">imap</span><span class="p">,</span> <span class="n">combinations</span><span class="p">,</span> <span class="n">ifilter</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">combinations</span><span class="p">,</span> <span class="n">ifilter</span><span class="p">,</span> <span class="n">imap</span><span class="p">,</span> <span class="n">product</span>
 <span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">attrgetter</span><span class="p">,</span> <span class="n">itemgetter</span>
+<span class="kn">import</span> <span class="nn">struct</span>
 <span class="kn">import</span> <span class="nn">time</span>
 
 <span class="kn">import</span> <span class="nn">enum</span>
+<span class="kn">from</span> <span class="nn">total_ordering</span> <span class="kn">import</span> <span class="n">total_ordering</span>
 
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
@@ -86,45 +88,131 @@
 
 
 <span class="k">def</span> <span class="nf">time_complement</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">MAX_SECOND_TICKS</span> <span class="o">-</span> <span class="n">t</span>
-
+    <span class="k">return</span> <span class="nb">long</span><span class="p">(</span><span class="n">MAX_SECOND_TICKS</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="CorefValue"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.CorefValue">[docs]</a><span class="k">class</span> <span class="nc">CorefValue</span><span class="p">(</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;</span>
-<span class="sd">    An enumeration that describes the value of a coreference judgment by a</span>
-<span class="sd">    human. The judgment is always made with respect to a pair of content</span>
+    <span class="sd">&#39;&#39;&#39;A human-assigned value for a coreference judgement.</span>
+
+<span class="sd">    The judgment is always made with respect to a pair of content</span>
 <span class="sd">    items.</span>
 
 <span class="sd">    :cvar Negative: The two items are not coreferent.</span>
 <span class="sd">    :cvar Unknown: It is unknown whether the two items are coreferent.</span>
 <span class="sd">    :cvar Positive: The two items are coreferent.</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">Negative</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
     <span class="n">Unknown</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">Positive</span> <span class="o">=</span> <span class="mi">1</span>
 
-</div>
-<span class="nd">@functools.total_ordering</span>
-<div class="viewcode-block" id="Label"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label">[docs]</a><span class="k">class</span> <span class="nc">Label</span><span class="p">(</span><span class="n">namedtuple</span><span class="p">(</span><span class="s">&#39;_Label&#39;</span><span class="p">,</span> <span class="s">&#39;content_id1 content_id2 subtopic_id1 &#39;</span> <span class="o">+</span>
-                                 <span class="s">&#39;subtopic_id2 annotator_id epoch_ticks &#39;</span><span class="o">+</span>
-                                 <span class="s">&#39;value&#39;</span><span class="p">)):</span>
-    <span class="sd">&#39;&#39;&#39;A label is an immutable unit of ground truth data.</span>
+    <span class="k">def</span> <span class="nf">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__class__</span> <span class="ow">is</span> <span class="n">other</span><span class="o">.</span><span class="n">__class__</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
 
-<span class="sd">    .. automethod:: __new__</span>
-<span class="sd">    .. automethod:: reversed</span>
-<span class="sd">    .. automethod:: other</span>
-<span class="sd">    .. automethod:: __lt__</span>
-<span class="sd">    .. automethod:: __eq__</span>
-<span class="sd">    .. automethod:: __hash__</span>
+    <span class="k">def</span> <span class="nf">__le__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__class__</span> <span class="ow">is</span> <span class="n">other</span><span class="o">.</span><span class="n">__class__</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="n">other</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+    <span class="k">def</span> <span class="nf">__gt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__class__</span> <span class="ow">is</span> <span class="n">other</span><span class="o">.</span><span class="n">__class__</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">&gt;</span> <span class="n">other</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+    <span class="k">def</span> <span class="nf">__ge__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__class__</span> <span class="ow">is</span> <span class="n">other</span><span class="o">.</span><span class="n">__class__</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">&gt;=</span> <span class="n">other</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">return</span> <span class="bp">NotImplemented</span>
+
+</div>
+<span class="nd">@total_ordering</span>
+<div class="viewcode-block" id="Label"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label">[docs]</a><span class="k">class</span> <span class="nc">Label</span><span class="p">(</span><span class="n">Container</span><span class="p">,</span> <span class="n">Hashable</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;An immutable unit of ground truth data.</span>
+
+<span class="sd">    This is a statement that the item at :attr:`content_id1`,</span>
+<span class="sd">    :attr:`subtopic_id1` refers to (or doesn&#39;t) the same thing as the</span>
+<span class="sd">    item at :attr:`content_id2`, :attr:`subtopic_id2`.  This assertion</span>
+<span class="sd">    was recorded by :attr:`annotator_id`, a string identifying a user,</span>
+<span class="sd">    at :attr:`epoch_ticks`, with :class:`CorefValue` :attr:`value`.</span>
+
+<span class="sd">    On creation, the tuple is normalized such that the pair of</span>
+<span class="sd">    `content_id1` and `subtopic_id1` are less than the pair of</span>
+<span class="sd">    `content_id2` and `subtopic_id2`.</span>
+
+<span class="sd">    Labels are comparable, sortable, and hashable.  The sort order</span>
+<span class="sd">    compares the two content IDs, the two subtopic IDs,</span>
+<span class="sd">    :attr:`annotator_id`, :attr:`epoch_ticks` (most recent is</span>
+<span class="sd">    smallest), and then other fields.</span>
+
+<span class="sd">    .. attribute:: content_id1</span>
+
+<span class="sd">       The first content ID.</span>
+
+<span class="sd">    .. attribute:: content_id2</span>
+
+<span class="sd">       The second content ID.</span>
+
+<span class="sd">    .. attribute:: annotator_id</span>
+
+<span class="sd">       An identifier of the user making this assertion.</span>
+
+<span class="sd">    .. attribute:: value</span>
+
+<span class="sd">       A :class:`CorefValue` stating whether this is a positive or</span>
+<span class="sd">       negative coreference assertion.</span>
+
+<span class="sd">    .. attribute:: subtopic_id1</span>
+
+<span class="sd">       An identifier defining a section or region of</span>
+<span class="sd">       :attr:`content_id1`.</span>
+
+<span class="sd">    .. attribute:: subtopic_id2</span>
+
+<span class="sd">       An identifier defining a section or region of</span>
+<span class="sd">       :attr:`content_id2`.</span>
+
+<span class="sd">    .. attribute:: epoch_ticks</span>
+
+<span class="sd">       The time at which :attr:`annotator_id` made this assertion,</span>
+<span class="sd">       in seconds since the Unix epoch.</span>
+
+<span class="sd">    .. attribute:: rating</span>
+
+<span class="sd">       An additional score showing the relative importance of this</span>
+<span class="sd">       label, mirroring :class:`streamcorpus.Rating`.</span>
+
+<span class="sd">    .. attribute:: meta</span>
+
+<span class="sd">       Any additional meta data about this label, structured as</span>
+<span class="sd">       a dictionary.</span>
+
+<span class="sd">    .. automethod:: __init__</span>
 <span class="sd">    .. automethod:: __contains__</span>
+<span class="sd">    .. automethod:: other</span>
+<span class="sd">    .. automethod:: subtopic_for</span>
+<span class="sd">    .. automethod:: same_subject_as</span>
+<span class="sd">    .. automethod:: most_recent</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
 
-<div class="viewcode-block" id="Label.__new__"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.__new__">[docs]</a>    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">content_id1</span><span class="p">,</span> <span class="n">content_id2</span><span class="p">,</span> <span class="n">annotator_id</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span>
-                <span class="n">subtopic_id1</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">epoch_ticks</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="c"># `__new__` is overridden instead of `__init__` because `namedtuple`</span>
-        <span class="c"># defines a `__new__` method. We modify construction by making</span>
-        <span class="c"># several values optional.</span>
+<div class="viewcode-block" id="Label.__init__"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_id1</span><span class="p">,</span> <span class="n">content_id2</span><span class="p">,</span> <span class="n">annotator_id</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span>
+                 <span class="n">subtopic_id1</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">epoch_ticks</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                 <span class="n">rating</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">meta</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Create a new label.</span>
+
+<span class="sd">        Parameters are assigned to their corresponding fields, with</span>
+<span class="sd">        some normalization.  If `value` is an :class:`int`, the</span>
+<span class="sd">        corresponding :class:`CorefValue` is used instead.  If</span>
+<span class="sd">        `epoch_ticks` is :const:`None` then the current time is</span>
+<span class="sd">        used.  If `rating` is :const:`None` then it will be 1 if</span>
+<span class="sd">        `value` is :attr:`CorefValue.Positive` and 0 otherwise.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Label</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+
+        <span class="c"># Fix up and provide defaults for various parameters</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
             <span class="n">value</span> <span class="o">=</span> <span class="n">CorefValue</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">epoch_ticks</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
@@ -133,31 +221,90 @@
             <span class="n">subtopic_id1</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
         <span class="k">if</span> <span class="n">subtopic_id2</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="n">subtopic_id2</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">Label</span><span class="p">,</span> <span class="n">cls</span><span class="p">)</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span>
-            <span class="n">cls</span><span class="p">,</span> <span class="n">content_id1</span><span class="o">=</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">content_id2</span><span class="o">=</span><span class="n">content_id2</span><span class="p">,</span>
-            <span class="n">subtopic_id1</span><span class="o">=</span><span class="n">subtopic_id1</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="o">=</span><span class="n">subtopic_id2</span><span class="p">,</span>
-            <span class="n">annotator_id</span><span class="o">=</span><span class="n">annotator_id</span><span class="p">,</span> <span class="n">epoch_ticks</span><span class="o">=</span><span class="n">epoch_ticks</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">)</span>
-</div>
-<div class="viewcode-block" id="Label.reversed"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.reversed">[docs]</a>    <span class="k">def</span> <span class="nf">reversed</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Returns a new label with ids swapped.</span>
 
-<span class="sd">        This method satisfies the following law: for every label</span>
-<span class="sd">        ``lab``, ``lab == lab.reversed()``.</span>
-<span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span>
-            <span class="n">content_id1</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span> <span class="n">content_id2</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span>
-            <span class="n">subtopic_id1</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Positive</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">rating</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">rating</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">rating</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="c"># Fix ordering of content, subtopic pairs</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">content_id2</span> <span class="o">&lt;</span> <span class="n">content_id1</span> <span class="ow">or</span>
+             <span class="p">(</span><span class="n">content_id2</span> <span class="o">==</span> <span class="n">content_id1</span> <span class="ow">and</span> <span class="n">subtopic_id2</span> <span class="o">&lt;</span> <span class="n">subtopic_id1</span><span class="p">))):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span> <span class="o">=</span> <span class="n">content_id2</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span> <span class="o">=</span> <span class="n">subtopic_id2</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span> <span class="o">=</span> <span class="n">content_id1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span> <span class="o">=</span> <span class="n">subtopic_id1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span> <span class="o">=</span> <span class="n">content_id1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span> <span class="o">=</span> <span class="n">subtopic_id1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span> <span class="o">=</span> <span class="n">content_id2</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span> <span class="o">=</span> <span class="n">subtopic_id2</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span> <span class="o">=</span> <span class="n">annotator_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span> <span class="o">=</span> <span class="n">epoch_ticks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rating</span> <span class="o">=</span> <span class="n">rating</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="n">meta</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="p">{}</span>
 </div>
+    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Creates a new label with the modifications given.</span>
+
+<span class="sd">        ``kwargs`` supports the same parameters as this class&#39;</span>
+<span class="sd">        constructor. A new label is created from a copy of</span>
+<span class="sd">        ``self`` with the parameters given as overrides.</span>
+
+<span class="sd">        For example, ``lab.update()`` creates a copy of ``lab``.</span>
+<span class="sd">        Another example, ``lab.update(annotator_id=&#39;foo&#39;)``</span>
+<span class="sd">        creates a copy of ``lab`` except the ``annotator_id`` field</span>
+<span class="sd">        is set to ``&#39;foo&#39;``.</span>
+
+<span class="sd">        (This is like ``namedtuple._replace`` or record updates in</span>
+<span class="sd">        functional languages.)</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">Label</span><span class="p">(</span><span class="o">**</span><span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">as_dict</span><span class="p">(),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">as_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns this label as a Python dictionary.&#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;content_id1&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="s">&#39;subtopic_id1&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span>
+            <span class="s">&#39;content_id2&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span> <span class="s">&#39;subtopic_id2&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">,</span>
+            <span class="s">&#39;annotator_id&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">,</span> <span class="s">&#39;value&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="s">&#39;epoch_ticks&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">,</span> <span class="s">&#39;rating&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">rating</span><span class="p">,</span>
+            <span class="s">&#39;meta&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span>
+        <span class="p">}</span>
+
 <div class="viewcode-block" id="Label.__contains__"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.__contains__">[docs]</a>    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Tests membership of identifiers.</span>
 
 <span class="sd">        If `v` is a tuple of ``(content_id, subtopic_id)``, then the</span>
-<span class="sd">        pair is checked for membership. Otherwise, `v` must be a `str`</span>
-<span class="sd">        and is checked for equality to one of the content ids in this</span>
-<span class="sd">        label.</span>
+<span class="sd">        pair is checked for membership. Otherwise, `v` must be a</span>
+<span class="sd">        :class:`str` and is checked for equality to one of the content</span>
+<span class="sd">        ids in this label.</span>
 
-<span class="sd">        As a special case, if ``v`` is ``(content_id, None)``, then</span>
-<span class="sd">        ``v`` is treated as if it were ``content_id``.</span>
+<span class="sd">        As a special case, if `v` is ``(content_id, None)``, then</span>
+<span class="sd">        `v` is treated as if it were ``content_id``.</span>
+
+<span class="sd">        &gt;&gt;&gt; l = Label(&#39;c1&#39;, &#39;c2&#39;, &#39;a&#39;, 1)</span>
+<span class="sd">        &gt;&gt;&gt; &#39;c1&#39; in l</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; &#39;a&#39; in l</span>
+<span class="sd">        False</span>
+<span class="sd">        &gt;&gt;&gt; (&#39;c1&#39;, None) in l</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; (&#39;c1&#39;, &#39;s1&#39;) in l</span>
+<span class="sd">        False</span>
+<span class="sd">        &gt;&gt;&gt; ll = Label(&#39;c1&#39;, &#39;c2&#39;, &#39;a&#39;, 1, &#39;s1&#39;, &#39;s2&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; &#39;c1&#39; in l</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; (&#39;c1&#39;, None) in l</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; (&#39;c1&#39;, &#39;s1&#39;) in l</span>
+<span class="sd">        True</span>
+
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -175,125 +322,236 @@
         <span class="sd">&#39;&#39;&#39;Returns the other content id.</span>
 
 <span class="sd">        If ``content_id == self.content_id1``, then return</span>
-<span class="sd">        ``self.content_id2`` (and vice versa).</span>
+<span class="sd">        ``self.content_id2`` (and vice versa).  Raises</span>
+<span class="sd">        :exc:`exceptions.KeyError` if `content_id` is neither one.</span>
+
+<span class="sd">        &gt;&gt;&gt; l = Label(&#39;c1, &#39;c2&#39;, &#39;a&#39;, 1)</span>
+<span class="sd">        &gt;&gt;&gt; l.other(&#39;c1&#39;)</span>
+<span class="sd">        &#39;c2&#39;</span>
+<span class="sd">        &gt;&gt;&gt; l.other(&#39;c2&#39;)</span>
+<span class="sd">        &#39;c1&#39;</span>
+<span class="sd">        &gt;&gt;&gt; l.other(&#39;a&#39;)</span>
+<span class="sd">        Traceback (most recent call last):</span>
+<span class="sd">            ...</span>
+<span class="sd">        KeyError: &#39;a&#39;</span>
+
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="k">if</span> <span class="n">content_id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span>
-        <span class="k">else</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">content_id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">content_id</span><span class="p">)</span>
 </div>
-    <span class="k">def</span> <span class="nf">subtopic_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_id</span><span class="p">):</span>
+<div class="viewcode-block" id="Label.subtopic_for"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.subtopic_for">[docs]</a>    <span class="k">def</span> <span class="nf">subtopic_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_id</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Get the subtopic id that corresponds with a content id.</span>
 
-<span class="sd">        Beware ``content_id`` must be one of either ``self.content_id1``</span>
-<span class="sd">        or ``self.content_id2``.</span>
-<span class="sd">        &#39;&#39;&#39;</span>
+<span class="sd">        &gt;&gt;&gt; l = Label(&#39;c1&#39;, &#39;c2&#39;, &#39;a&#39;, 1, &#39;s1&#39;, &#39;s2&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; l.subtopic_for(&#39;c1&#39;)</span>
+<span class="sd">        &#39;s1&#39;</span>
+<span class="sd">        &gt;&gt;&gt; l.subtopic_for(&#39;c2&#39;)</span>
+<span class="sd">        &#39;s2&#39;</span>
+<span class="sd">        &gt;&gt;&gt; l.subtopic_for(&#39;a&#39;)</span>
+<span class="sd">        Traceback (most recent call last):</span>
+<span class="sd">            ...</span>
+<span class="sd">        KeyError: &#39;a&#39;</span>
 
-        <span class="k">assert</span> <span class="n">content_id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span> <span class="ow">or</span> \
-            <span class="n">content_id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span>
+<span class="sd">        :param str content_id: content ID to look up</span>
+<span class="sd">        :return: subtopic ID for `content_id`</span>
+<span class="sd">        :raise exceptions.KeyError: if `content_id` is neither</span>
+<span class="sd">          content ID in this label</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
 
         <span class="k">if</span> <span class="n">content_id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span>
-        <span class="k">else</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">content_id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">content_id</span><span class="p">)</span>
+</div>
+    <span class="k">def</span> <span class="nf">__lt__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id2</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id2</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">annotator_id</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">:</span>
+            <span class="c"># opposite ordering here (consciously -- newer is smaller)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span> <span class="o">&gt;</span> <span class="n">other</span><span class="o">.</span><span class="n">epoch_ticks</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">other</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rating</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">rating</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rating</span> <span class="o">&lt;</span> <span class="n">other</span><span class="o">.</span><span class="n">rating</span>
+        <span class="k">return</span> <span class="bp">False</span>  <span class="c"># self == other</span>
 
-    <span class="k">def</span> <span class="nf">_to_kvlayer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Converts this label to a kvlayer tuple.</span>
+    <span class="k">def</span> <span class="nf">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">other</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rating</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">rating</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">return</span> <span class="bp">True</span>
 
-<span class="sd">        The tuple returned can be used directly in a :mod:`kvlayer`</span>
-<span class="sd">        ``put`` call.</span>
+<div class="viewcode-block" id="Label.same_subject_as"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.same_subject_as">[docs]</a>    <span class="k">def</span> <span class="nf">same_subject_as</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Determine if two labels are about the same thing.</span>
 
-<span class="sd">        :rtype: ``(key, value)``</span>
+<span class="sd">        This predicate returns :const:`True` if `self` and `other`</span>
+<span class="sd">        have the same content IDs, subtopic IDs, and annotator ID.</span>
+<span class="sd">        The other fields may have any value.</span>
+
+<span class="sd">        &gt;&gt;&gt; t = time.time()</span>
+<span class="sd">        &gt;&gt;&gt; l1 = Label(&#39;c1&#39;, &#39;c2&#39;, &#39;a&#39;, CorefValue.Positive,</span>
+<span class="sd">        ...            epoch_ticks=t)</span>
+<span class="sd">        &gt;&gt;&gt; l2 = Label(&#39;c1&#39;, &#39;c2&#39;, &#39;a&#39;, CorefValue.Negative,</span>
+<span class="sd">        ...            epoch_ticks=t)</span>
+<span class="sd">        &gt;&gt;&gt; l1.same_subject_as(l2)</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; l1 == l2</span>
+<span class="sd">        False</span>
+
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="n">epoch_ticks_rev</span> <span class="o">=</span> <span class="n">time_complement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">)</span>
-        <span class="n">negated</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replace</span><span class="p">(</span><span class="n">epoch_ticks</span><span class="o">=</span><span class="n">epoch_ticks_rev</span><span class="p">)[</span><span class="mi">0</span><span class="p">:</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">negated</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">value</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">content_id2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">return</span> <span class="bp">True</span>
+</div>
+    <span class="k">def</span> <span class="nf">changed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns true if ``other`` is modified from ``self`.</span>
+
+<span class="sd">        More specifically, returns true if and only if ``self``</span>
+<span class="sd">        and ``other`` share the same subject but have different</span>
+<span class="sd">        coref/rating values.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">same_subject_as</span><span class="p">(</span><span class="n">other</span><span class="p">)</span> \
+                <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rating</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">rating</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_from_kvlayer</span><span class="p">(</span><span class="n">row</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Create a new :class:`Label` from a kvlayer result.</span>
+<div class="viewcode-block" id="Label.most_recent"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.most_recent">[docs]</a>    <span class="k">def</span> <span class="nf">most_recent</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Filter an iterator to return the most recent for each subject.</span>
 
-<span class="sd">        The ``row`` should be a tuple of ``(key, value)``</span>
-<span class="sd">        where ``key`` corresponds to the namespace defined at</span>
-<span class="sd">        :attr:`LabelStore._kvlayer_namespace`.</span>
+<span class="sd">        `labels` is any iterator over :class:`Label` objects.  It</span>
+<span class="sd">        should be sorted with the most recent first, which is the</span>
+<span class="sd">        natural sort order that :func:`sorted` and the</span>
+<span class="sd">        :class:`LabelStore` adapter will return.  The result of this</span>
+<span class="sd">        is a generator of the same labels but with any that are not</span>
+<span class="sd">        the most recent for the same subject (according to</span>
+<span class="sd">        :meth:`same_subject_as`) filtered out.</span>
 
-<span class="sd">        :param row: kvlayer result</span>
-<span class="sd">        :type row: ``(key, value)``</span>
-<span class="sd">        :rtype: :class:`Label`</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">row</span>
-        <span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span><span class="p">,</span> <span class="n">ann</span><span class="p">,</span> <span class="n">ticks</span> <span class="o">=</span> <span class="n">key</span>
-        <span class="k">return</span> <span class="n">Label</span><span class="p">(</span><span class="n">content_id1</span><span class="o">=</span><span class="n">cid1</span><span class="p">,</span> <span class="n">content_id2</span><span class="o">=</span><span class="n">cid2</span><span class="p">,</span>
-                     <span class="n">subtopic_id1</span><span class="o">=</span><span class="n">subid1</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="o">=</span><span class="n">subid2</span><span class="p">,</span>
-                     <span class="n">annotator_id</span><span class="o">=</span><span class="n">ann</span><span class="p">,</span>
-                     <span class="n">epoch_ticks</span><span class="o">=</span><span class="n">time_complement</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">ticks</span><span class="p">)),</span>
-                     <span class="n">value</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">))</span>
-
-<div class="viewcode-block" id="Label.__lt__"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.__lt__">[docs]</a>    <span class="k">def</span> <span class="nf">__lt__</span><span class="p">(</span><span class="n">l1</span><span class="p">,</span> <span class="n">l2</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Defines a total ordering for labels.</span>
-
-<span class="sd">        The ordering is meant to be the same as the ordering used</span>
-<span class="sd">        in the underlying database storage. Namely, the key used</span>
-<span class="sd">        to determine ordering is: ``(cid1, cid2, subid1, subid2,</span>
-<span class="sd">        annotator_id, MAX_TIME - epoch_ticks)`` where ``cid1 &lt;= cid2``</span>
-<span class="sd">        and ``subid1 &lt;= subid2``.</span>
-
-<span class="sd">        Notably, the ordering does not include the coreferent ``value``</span>
-<span class="sd">        and it complements ``epoch_ticks`` so that more recent</span>
-<span class="sd">        labels appear first in ascending order.</span>
-<span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">return</span> <span class="n">l1</span><span class="o">.</span><span class="n">_cmp_value</span> <span class="o">&lt;</span> <span class="n">l2</span><span class="o">.</span><span class="n">_cmp_value</span>
+        <span class="n">prev_label</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">prev_label</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">label</span><span class="o">.</span><span class="n">same_subject_as</span><span class="p">(</span><span class="n">prev_label</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">label</span>
+            <span class="n">prev_label</span> <span class="o">=</span> <span class="n">label</span>
 </div>
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_cmp_value</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span> <span class="o">=</span> <span class="n">normalize_pair</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span>
-        <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span> <span class="o">=</span> <span class="n">normalize_pair</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">)</span>
-        <span class="n">ticks</span> <span class="o">=</span> <span class="n">time_complement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">,</span> <span class="n">ticks</span><span class="p">)</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">diff</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns a *diff* of two sets of labels.</span>
 
-<div class="viewcode-block" id="Label.__eq__"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.__eq__">[docs]</a>    <span class="k">def</span> <span class="nf">__eq__</span><span class="p">(</span><span class="n">l1</span><span class="p">,</span> <span class="n">l2</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Tests equality between two labels.</span>
+<span class="sd">        The diff returned represents the changes required to the set</span>
+<span class="sd">        of ``old`` labels in order to provide the same semantic meaning</span>
+<span class="sd">        as the set of ``new`` labels. Thus, the diff is a Python dictionary</span>
+<span class="sd">        with three keys: ``add``, ``delete`` and ``change``. All three</span>
+<span class="sd">        keys map to a sequence of labels.</span>
 
-<span class="sd">        Equality is keyed on ``annotator_id`` and the unordered</span>
-<span class="sd">        comparison between content ids and subtopic ids.</span>
+<span class="sd">        ``add`` corresponds to the labels that are in ``new`` but not in</span>
+<span class="sd">        ``old``.</span>
 
-<span class="sd">        This definition of equality does not include the values for</span>
-<span class="sd">        ``epoch_ticks`` or ``value``.</span>
+<span class="sd">        ``delete`` corresponds to the labels that are in ``old`` but not</span>
+<span class="sd">        in ``new``.</span>
+
+<span class="sd">        ``change`` corresponds to the labels that are in both ``old``</span>
+<span class="sd">        and ``new`` but have different coref/rating values.</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="n">l1</span><span class="o">.</span><span class="n">annotator_id</span> <span class="o">==</span> <span class="n">l2</span><span class="o">.</span><span class="n">annotator_id</span>
-            <span class="ow">and</span> <span class="n">unordered_pair_eq</span><span class="p">((</span><span class="n">l1</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">l1</span><span class="o">.</span><span class="n">content_id2</span><span class="p">),</span>
-                                  <span class="p">(</span><span class="n">l2</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">l2</span><span class="o">.</span><span class="n">content_id2</span><span class="p">))</span>
-            <span class="ow">and</span> <span class="n">unordered_pair_eq</span><span class="p">((</span><span class="n">l1</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span> <span class="n">l1</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">),</span>
-                                  <span class="p">(</span><span class="n">l2</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span> <span class="n">l2</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">))</span>
-        <span class="p">)</span>
-</div>
-<div class="viewcode-block" id="Label.__hash__"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.Label.__hash__">[docs]</a>    <span class="k">def</span> <span class="nf">__hash__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Returns a hash of this label.</span>
+        <span class="c"># A wrapper type for a more relaxed label equality comparison.</span>
+        <span class="c"># (We use a wrapper type so that its easy to unwrap it.)</span>
+        <span class="k">class</span> <span class="nc">SubjectLabel</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+            <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lab</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lab</span> <span class="o">=</span> <span class="n">lab</span>
+            <span class="k">def</span> <span class="nf">changed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lab</span><span class="o">.</span><span class="n">changed</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">lab</span><span class="p">)</span>
+            <span class="k">def</span> <span class="nf">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lab</span><span class="o">.</span><span class="n">same_subject_as</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">lab</span><span class="p">)</span>
+            <span class="k">def</span> <span class="nf">__hash__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+                <span class="k">return</span> <span class="nb">hash</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">lab</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lab</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span>
+                             <span class="bp">self</span><span class="o">.</span><span class="n">lab</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lab</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">,</span>
+                             <span class="bp">self</span><span class="o">.</span><span class="n">lab</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">))</span>
 
-<span class="sd">        The hash is made up of the content ids, subtopic ids and the</span>
-<span class="sd">        annotator id. This hash function obeys the following law:</span>
-<span class="sd">        for all labels ``x`` and ``y``, ``x == y`` if and only if</span>
-<span class="sd">        ``hash(x) == hash(y)``.</span>
-<span class="sd">        &#39;&#39;&#39;</span>
-        <span class="c"># This code is clearer if we use `frozenset`, but let&#39;s avoid</span>
-        <span class="c"># creating intermediate objects.</span>
-        <span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span> <span class="o">=</span> <span class="n">normalize_pair</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span>
-        <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span> <span class="o">=</span> <span class="n">normalize_pair</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">hash</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">,</span> <span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span><span class="p">))</span>
-</div>
-    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">tpl</span> <span class="o">=</span> <span class="s">&#39;Label({cid1}, {cid2}, &#39;</span> <span class="o">+</span> \
-                    <span class="s">&#39;{subid1}{subid2}annotator={ann}, {tstr}, value={v})&#39;</span>
-        <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span> <span class="o">=</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span>
+        <span class="n">old</span><span class="p">,</span> <span class="n">new</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">SubjectLabel</span><span class="p">,</span> <span class="n">old</span><span class="p">)),</span> <span class="nb">set</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">SubjectLabel</span><span class="p">,</span> <span class="n">new</span><span class="p">))</span>
+        <span class="n">add</span><span class="p">,</span> <span class="n">delete</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">new</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">old</span><span class="p">)),</span> <span class="nb">list</span><span class="p">(</span><span class="n">old</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">new</span><span class="p">))</span>
+        <span class="n">change</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span>
+                     <span class="n">ifilter</span><span class="p">(</span><span class="k">lambda</span> <span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span> <span class="n">o</span><span class="o">.</span><span class="n">changed</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">product</span><span class="p">(</span><span class="n">old</span><span class="p">,</span> <span class="n">new</span><span class="p">)))</span>
+        <span class="n">unwrap</span> <span class="o">=</span> <span class="n">attrgetter</span><span class="p">(</span><span class="s">&#39;lab&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;add&#39;</span><span class="p">:</span> <span class="nb">map</span><span class="p">(</span><span class="n">unwrap</span><span class="p">,</span> <span class="n">add</span><span class="p">),</span>
+            <span class="s">&#39;delete&#39;</span><span class="p">:</span> <span class="nb">map</span><span class="p">(</span><span class="n">unwrap</span><span class="p">,</span> <span class="n">delete</span><span class="p">),</span>
+            <span class="s">&#39;change&#39;</span><span class="p">:</span> <span class="nb">map</span><span class="p">(</span><span class="n">unwrap</span><span class="p">,</span> <span class="n">change</span><span class="p">),</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">__hash__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">)</span> <span class="o">^</span>
+                <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span> <span class="o">^</span>
+                <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">)</span> <span class="o">^</span>
+                <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">)</span> <span class="o">^</span>
+                <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">)</span> <span class="o">^</span>
+                <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">)</span> <span class="o">^</span>
+                <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="o">^</span>
+                <span class="nb">hash</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rating</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="c"># strip quotes</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">:</span>
-            <span class="n">subid1</span> <span class="o">=</span> <span class="s">&#39;subtopic1=</span><span class="si">%s</span><span class="s">, &#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span>
+            <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39;(&#39;</span> <span class="o">+</span> <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&#39;)&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Positive</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39; ==&#39;</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Unknown</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39; ??&#39;</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="ow">is</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39; !=&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39; **&#39;</span>
+        <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39;(&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rating</span><span class="p">)</span> <span class="o">+</span> <span class="s">&#39;) &#39;</span>
+        <span class="n">res</span> <span class="o">+=</span> <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="c"># strip quotes</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">:</span>
-            <span class="n">subid2</span> <span class="o">=</span> <span class="s">&#39;subtopic2=</span><span class="si">%s</span><span class="s">, &#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span>
-        <span class="n">dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcfromtimestamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">tpl</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">cid1</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">cid2</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span>
-                         <span class="n">subid1</span><span class="o">=</span><span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span><span class="o">=</span><span class="n">subid2</span><span class="p">,</span> <span class="n">tstr</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">dt</span><span class="p">),</span>
-                         <span class="n">ann</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">,</span> <span class="n">v</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+            <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39;(&#39;</span> <span class="o">+</span> <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="s">&#39;)&#39;</span>
+        <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39; by &#39;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">annotator_id</span>
+        <span class="n">res</span> <span class="o">+=</span> <span class="s">&#39; at &#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">utcfromtimestamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">res</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="s">&#39;Label(&#39;</span>
+                <span class="s">&#39;content_id1={0.content_id1}, &#39;</span>
+                <span class="s">&#39;content_id2={0.content_id2}, &#39;</span>
+                <span class="s">&#39;annotator_id={0.annotator_id}, &#39;</span>
+                <span class="s">&#39;value={0.value}, &#39;</span>
+                <span class="s">&#39;subtopic_id1={0.subtopic_id1}, &#39;</span>
+                <span class="s">&#39;subtopic_id2={0.subtopic_id2}, &#39;</span>
+                <span class="s">&#39;epoch_ticks={0.epoch_ticks}, &#39;</span>
+                <span class="s">&#39;rating={0.rating})&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
 
 </div>
 <div class="viewcode-block" id="LabelStore"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore">[docs]</a><span class="k">class</span> <span class="nc">LabelStore</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -331,24 +589,52 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span> <span class="o">=</span> <span class="n">kvlclient</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">setup_namespace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kvlayer_namespace</span><span class="p">)</span>
 </div>
-<div class="viewcode-block" id="LabelStore.put"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.put">[docs]</a>    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">):</span>
+<div class="viewcode-block" id="LabelStore.put"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.put">[docs]</a>    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">labels</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Add a new label to the store.</span>
 
 <span class="sd">        :param label: label</span>
 <span class="sd">        :type label: :class:`Label`</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;adding label &quot;</span><span class="si">%r</span><span class="s">&quot;&#39;</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">,</span>
-                     <span class="n">label</span><span class="o">.</span><span class="n">_to_kvlayer</span><span class="p">(),</span> <span class="n">label</span><span class="o">.</span><span class="n">reversed</span><span class="p">()</span><span class="o">.</span><span class="n">_to_kvlayer</span><span class="p">())</span>
+        <span class="n">puts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+            <span class="n">k1</span><span class="p">,</span> <span class="n">k2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys_from_label</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value_from_label</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="n">puts</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">k1</span><span class="p">,</span> <span class="n">v</span><span class="p">))</span>
+            <span class="n">puts</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">k2</span><span class="p">,</span> <span class="n">v</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">,</span> <span class="o">*</span><span class="n">puts</span><span class="p">)</span>
 </div>
+    <span class="k">def</span> <span class="nf">_keys_from_label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">):</span>
+        <span class="c"># `label` is stored under both normal and swapped key tuples,</span>
+        <span class="c"># so that we can efficiently find c2&lt;-&gt;c1 labels</span>
+        <span class="n">k1</span> <span class="o">=</span> <span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span>
+              <span class="n">label</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span> <span class="n">label</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">,</span>
+              <span class="n">label</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">,</span> <span class="n">time_complement</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">))</span>
+        <span class="n">k2</span> <span class="o">=</span> <span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span> <span class="n">label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span>
+              <span class="n">label</span><span class="o">.</span><span class="n">subtopic_id2</span><span class="p">,</span> <span class="n">label</span><span class="o">.</span><span class="n">subtopic_id1</span><span class="p">,</span>
+              <span class="n">label</span><span class="o">.</span><span class="n">annotator_id</span><span class="p">,</span> <span class="n">time_complement</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">epoch_ticks</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">k1</span><span class="p">,</span> <span class="n">k2</span>
+
+    <span class="k">def</span> <span class="nf">_value_from_label</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">):</span>
+        <span class="c"># Pack value and rating into a single byte, since both will likely</span>
+        <span class="c"># be small integers.</span>
+        <span class="n">to_pack</span> <span class="o">=</span> <span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">value</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">rating</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s">&#39;B&#39;</span><span class="p">,</span> <span class="n">to_pack</span><span class="p">)</span>
+
+        <span class="c"># Encode the metadata.</span>
+        <span class="n">meta_ser</span> <span class="o">=</span> <span class="n">cbor</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">v</span> <span class="o">+</span> <span class="n">meta_ser</span>
+
 <div class="viewcode-block" id="LabelStore.get"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.get">[docs]</a>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">annotator_id</span><span class="p">,</span> <span class="n">subid1</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">subid2</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Retrieve a label from the store.</span>
 
 <span class="sd">        When ``subid1`` and ``subid2`` are empty, then a label without</span>
 <span class="sd">        subtopic identifiers will be returned.</span>
 
-<span class="sd">        Note that the combination of content ids, subtopic ids and</span>
-<span class="sd">        an annotator id *uniquely* identifies a label.</span>
+<span class="sd">        If there are multiple labels stored with the same parts,</span>
+<span class="sd">        the single most recent one will be returned.  If there are</span>
+<span class="sd">        no labels with these parts, :exc:`exceptions.KeyError` will</span>
+<span class="sd">        be raised.</span>
 
 <span class="sd">        :param str cid1: content id</span>
 <span class="sd">        :param str cid2: content id</span>
@@ -357,18 +643,41 @@
 <span class="sd">        :param str subid2: subtopic id</span>
 <span class="sd">        :rtype: :class:`Label`</span>
 <span class="sd">        :raises: :exc:`KeyError` if no label could be found.</span>
+
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span><span class="p">,</span> <span class="n">annotator_id</span><span class="p">,</span> <span class="nb">long</span><span class="p">(</span><span class="o">-</span><span class="n">sys</span><span class="o">.</span><span class="n">maxint</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
-        <span class="n">e</span> <span class="o">=</span> <span class="p">(</span><span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span><span class="p">,</span> <span class="n">annotator_id</span><span class="p">,</span> <span class="nb">long</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">maxint</span><span class="p">))</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="p">(</span><span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid1</span><span class="p">,</span> <span class="n">subid2</span><span class="p">,</span> <span class="n">annotator_id</span><span class="p">)</span>
 
         <span class="c"># We return the first result because the `kvlayer` abstraction</span>
         <span class="c"># guarantees that the first result will be the most recent entry</span>
         <span class="c"># for this particular key (since the timestamp is inserted as a</span>
         <span class="c"># complement value).</span>
-        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">,</span> <span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">e</span><span class="p">)):</span>
-            <span class="k">return</span> <span class="n">Label</span><span class="o">.</span><span class="n">_from_kvlayer</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">((</span><span class="n">s</span><span class="p">,</span> <span class="n">e</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">,</span> <span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">t</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_label_from_kvlayer</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
 </div>
+    <span class="k">def</span> <span class="nf">_label_from_kvlayer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Make a label from a kvlayer row.&#39;&#39;&#39;</span>
+        <span class="p">(</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">content_id2</span><span class="p">,</span> <span class="n">subtopic_id1</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="p">,</span>
+         <span class="n">annotator_id</span><span class="p">,</span> <span class="n">inverted_epoch_ticks</span><span class="p">)</span> <span class="o">=</span> <span class="n">k</span>
+        <span class="n">epoch_ticks</span> <span class="o">=</span> <span class="n">time_complement</span><span class="p">(</span><span class="n">inverted_epoch_ticks</span><span class="p">)</span>
+
+        <span class="p">(</span><span class="n">unpacked</span><span class="p">,)</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s">&#39;B&#39;</span><span class="p">,</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="p">(</span><span class="n">unpacked</span> <span class="o">&amp;</span> <span class="mi">15</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">rating</span> <span class="o">=</span> <span class="p">(</span><span class="n">unpacked</span> <span class="o">&gt;&gt;</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="n">cbor</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+        <span class="k">return</span> <span class="n">Label</span><span class="p">(</span><span class="n">content_id1</span><span class="o">=</span><span class="n">content_id1</span><span class="p">,</span>
+                     <span class="n">content_id2</span><span class="o">=</span><span class="n">content_id2</span><span class="p">,</span>
+                     <span class="n">annotator_id</span><span class="o">=</span><span class="n">annotator_id</span><span class="p">,</span>
+                     <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">,</span>
+                     <span class="n">subtopic_id1</span><span class="o">=</span><span class="n">subtopic_id1</span><span class="p">,</span>
+                     <span class="n">subtopic_id2</span><span class="o">=</span><span class="n">subtopic_id2</span><span class="p">,</span>
+                     <span class="n">epoch_ticks</span><span class="o">=</span><span class="n">epoch_ticks</span><span class="p">,</span>
+                     <span class="n">rating</span><span class="o">=</span><span class="n">rating</span><span class="p">,</span>
+                     <span class="n">meta</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span>
+
 <div class="viewcode-block" id="LabelStore.directly_connected"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.directly_connected">[docs]</a>    <span class="k">def</span> <span class="nf">directly_connected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ident</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Return a generator of labels connected to ``ident``.</span>
 
@@ -386,14 +695,9 @@
 <span class="sd">        :rtype: generator of :class:`Label`</span>
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="n">content_id</span><span class="p">,</span> <span class="n">subtopic_id</span> <span class="o">=</span> <span class="n">normalize_ident</span><span class="p">(</span><span class="n">ident</span><span class="p">)</span>
-        <span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="n">content_id</span><span class="p">,)</span>
-        <span class="n">e</span> <span class="o">=</span> <span class="p">(</span><span class="n">content_id</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\xff</span><span class="s">&#39;</span><span class="p">,)</span>
-        <span class="n">results</span> <span class="o">=</span> <span class="n">imap</span><span class="p">(</span><span class="n">Label</span><span class="o">.</span><span class="n">_from_kvlayer</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">,</span> <span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">e</span><span class="p">)))</span>
-        <span class="n">results</span> <span class="o">=</span> <span class="n">latest_labels</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">subtopic_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="n">pair</span> <span class="o">=</span> <span class="p">(</span><span class="n">content_id</span><span class="p">,</span> <span class="n">subtopic_id</span><span class="p">)</span>
-            <span class="n">results</span> <span class="o">=</span> <span class="n">ifilter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">lab</span><span class="p">:</span> <span class="n">pair</span> <span class="ow">in</span> <span class="n">lab</span><span class="p">,</span> <span class="n">results</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">results</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">everything</span><span class="p">(</span><span class="n">include_deleted</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                               <span class="n">content_id</span><span class="o">=</span><span class="n">content_id</span><span class="p">,</span>
+                               <span class="n">subtopic_id</span><span class="o">=</span><span class="n">subtopic_id</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="LabelStore.connected_component"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.connected_component">[docs]</a>    <span class="k">def</span> <span class="nf">connected_component</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ident</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Return a connected component generator for ``ident``.</span>
@@ -419,7 +723,7 @@
         <span class="n">ident</span> <span class="o">=</span> <span class="n">normalize_ident</span><span class="p">(</span><span class="n">ident</span><span class="p">)</span>
         <span class="n">done</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>  <span class="c"># set of cids that we&#39;ve queried with</span>
         <span class="n">todo</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([</span><span class="n">ident</span><span class="p">])</span>  <span class="c"># set of cids to do a query for</span>
-        <span class="n">label_hashes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">while</span> <span class="n">todo</span><span class="p">:</span>
             <span class="n">ident</span> <span class="o">=</span> <span class="n">todo</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
             <span class="n">done</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ident</span><span class="p">)</span>
@@ -433,9 +737,8 @@
                 <span class="k">if</span> <span class="n">ident2</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">done</span><span class="p">:</span>
                     <span class="n">todo</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ident2</span><span class="p">)</span>
 
-                <span class="n">h</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">h</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">label_hashes</span><span class="p">:</span>
-                    <span class="n">label_hashes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
                     <span class="k">yield</span> <span class="n">label</span>
 </div>
 <div class="viewcode-block" id="LabelStore.expand"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.expand">[docs]</a>    <span class="k">def</span> <span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ident</span><span class="p">):</span>
@@ -502,30 +805,134 @@
 
         <span class="n">cid2_comp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected_component</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">comp_label</span> <span class="ow">in</span> <span class="n">cid2_comp</span><span class="p">:</span>
-            <span class="n">cid</span> <span class="o">=</span> <span class="n">comp_label</span><span class="o">.</span><span class="n">other</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span>
-            <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">cid</span><span class="p">,</span> <span class="s">&#39;auto&#39;</span><span class="p">,</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">)</span>
+            <span class="n">comp_cids</span> <span class="o">=</span> <span class="p">(</span><span class="n">comp_label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span>
+                         <span class="n">comp_label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">comp_cid</span> <span class="ow">in</span> <span class="n">comp_cids</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">comp_cid</span> <span class="o">==</span> <span class="n">label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">comp_cid</span><span class="p">,</span>
+                                <span class="s">&#39;auto&#39;</span><span class="p">,</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">)</span>
 
         <span class="n">cid1_comp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected_component</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">comp_label</span> <span class="ow">in</span> <span class="n">cid1_comp</span><span class="p">:</span>
-            <span class="n">cid</span> <span class="o">=</span> <span class="n">comp_label</span><span class="o">.</span><span class="n">other</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">)</span>
-            <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span> <span class="n">cid</span><span class="p">,</span> <span class="s">&#39;auto&#39;</span><span class="p">,</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">)</span>
+            <span class="n">comp_cids</span> <span class="o">=</span> <span class="p">(</span><span class="n">comp_label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">,</span>
+                         <span class="n">comp_label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">comp_cid</span> <span class="ow">in</span> <span class="n">comp_cids</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">comp_cid</span> <span class="o">==</span> <span class="n">label</span><span class="o">.</span><span class="n">content_id1</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">content_id2</span><span class="p">,</span> <span class="n">comp_cid</span><span class="p">,</span>
+                                <span class="s">&#39;auto&#39;</span><span class="p">,</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">)</span>
 
-<div class="viewcode-block" id="LabelStore.everything"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.everything">[docs]</a>    <span class="k">def</span> <span class="nf">everything</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">include_deleted</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_filter_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">subtopic_id</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Filter out-of-order labels by key tuple.</span>
+
+<span class="sd">        :class:`Label` always sorts by `(cid1,cid2,sid1,sid2)`, but</span>
+<span class="sd">        for efficient lookups on `cid2` this class also stores in</span>
+<span class="sd">        order `(cid2,cid1,sid2,sid1)`.  Filter out things that are</span>
+<span class="sd">        in the wrong order.  But, if an original query specified</span>
+<span class="sd">        `content_id` or `subtopic_id`, account for the possibility</span>
+<span class="sd">        that something might be apparently out-of-order but its</span>
+<span class="sd">        dual will not be in the query at all.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">def</span> <span class="nf">accept</span><span class="p">(</span><span class="n">kvp</span><span class="p">):</span>
+            <span class="p">(</span><span class="n">content_id1</span><span class="p">,</span> <span class="n">content_id2</span><span class="p">,</span> <span class="n">subtopic_id1</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="p">,</span>
+             <span class="n">annotator_id</span><span class="p">,</span> <span class="n">inverted_epoch_ticks</span><span class="p">)</span> <span class="o">=</span> <span class="n">kvp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">content_id</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="c"># We&#39;re scanning everything, so accept the label if</span>
+                <span class="c"># it&#39;s the natural order; l.content_id1 == cid1</span>
+                <span class="k">return</span> <span class="p">(</span><span class="n">content_id1</span> <span class="o">&lt;</span> <span class="n">content_id2</span> <span class="ow">or</span>
+                        <span class="p">(</span><span class="n">content_id1</span> <span class="o">==</span> <span class="n">content_id2</span> <span class="ow">and</span>
+                         <span class="n">subtopic_id1</span> <span class="o">&lt;=</span> <span class="n">subtopic_id2</span><span class="p">))</span>
+            <span class="k">assert</span> <span class="n">content_id1</span> <span class="o">==</span> <span class="n">content_id</span>  <span class="c"># because that&#39;s the scan range</span>
+            <span class="c"># If we&#39;re not looking for subtopic IDs, then accept records</span>
+            <span class="c"># matching the content ID that are in natural order</span>
+            <span class="k">if</span> <span class="n">subtopic_id</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">content_id2</span> <span class="o">!=</span> <span class="n">content_id</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="bp">True</span>  <span class="c"># will never see its dual</span>
+                <span class="k">return</span> <span class="n">subtopic_id1</span> <span class="o">&lt;=</span> <span class="n">subtopic_id2</span>
+            <span class="c"># The scan range doesn&#39;t include subtopic IDs (the key schema</span>
+            <span class="c"># is oriented towards querying content-to-content labels)</span>
+            <span class="c"># so we need to accept records where either part matches</span>
+            <span class="c"># (if both parts match then the record is its own dual)</span>
+            <span class="k">if</span> <span class="n">subtopic_id</span> <span class="o">==</span> <span class="n">subtopic_id1</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">True</span>
+            <span class="k">if</span> <span class="n">content_id</span> <span class="o">==</span> <span class="n">content_id2</span> <span class="ow">and</span> <span class="n">subtopic_id</span> <span class="o">==</span> <span class="n">subtopic_id2</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">True</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">return</span> <span class="n">accept</span>
+
+<div class="viewcode-block" id="LabelStore.everything"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.everything">[docs]</a>    <span class="k">def</span> <span class="nf">everything</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">include_deleted</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">content_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                   <span class="n">subtopic_id</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Returns a generator of all labels in the store.</span>
 
-<span class="sd">        If ``include_deleted`` is ``True``, labels that have been</span>
-<span class="sd">        deleted are also included.</span>
+<span class="sd">        If `include_deleted` is :const:`True`, labels that have been</span>
+<span class="sd">        overwritten with more recent labels are also included.  If</span>
+<span class="sd">        `content_id` is not :const:`None`, only labels for that</span>
+<span class="sd">        content ID are retrieved; and then if `subtopic_id` is not</span>
+<span class="sd">        :const:`None`, only that subtopic is retrieved, else all</span>
+<span class="sd">        subtopics are retrieved.  The returned labels will always be</span>
+<span class="sd">        in sorted order, content IDs first, and with those with the</span>
+<span class="sd">        same content, subtopic, and annotator IDs sorted newest first.</span>
 
 <span class="sd">        :rtype: generator of :class:`Label`</span>
+
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="n">results</span> <span class="o">=</span> <span class="n">imap</span><span class="p">(</span><span class="n">Label</span><span class="o">.</span><span class="n">_from_kvlayer</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">results</span> <span class="k">if</span> <span class="n">include_deleted</span> <span class="k">else</span> <span class="n">latest_labels</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">content_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">ranges</span> <span class="o">=</span> <span class="p">[((</span><span class="n">content_id</span><span class="p">,),</span> <span class="p">(</span><span class="n">content_id</span><span class="p">,))]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ranges</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">,</span> <span class="o">*</span><span class="n">ranges</span><span class="p">)</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">ifilter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_filter_keys</span><span class="p">(</span><span class="n">content_id</span><span class="p">,</span> <span class="n">subtopic_id</span><span class="p">),</span> <span class="n">labels</span><span class="p">)</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">imap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_label_from_kvlayer</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">),</span> <span class="n">labels</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">include_deleted</span><span class="p">:</span>
+            <span class="n">labels</span> <span class="o">=</span> <span class="n">Label</span><span class="o">.</span><span class="n">most_recent</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">labels</span>
 </div>
 <div class="viewcode-block" id="LabelStore.delete_all"><a class="viewcode-back" href="../../../dossier.label.html#dossier.label.LabelStore.delete_all">[docs]</a>    <span class="k">def</span> <span class="nf">delete_all</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Deletes all labels in the store.&#39;&#39;&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">clear_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">)</span>
+</div>
+    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">labels</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Delete `labels` from the store, which involves deleting two</span>
+<span class="sd">        records for each :class:`Label`.</span>
 
-</div></div>
+<span class="sd">        :rtype: None</span>
+<span class="sd">        :raises: :exc:`KeyError` if any of the `labels` could not be found.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">deletes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+            <span class="n">k1</span><span class="p">,</span> <span class="n">k2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keys_from_label</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="n">deletes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k1</span><span class="p">)</span>
+            <span class="n">deletes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">TABLE</span><span class="p">,</span> <span class="o">*</span><span class="n">deletes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply_diff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">diff</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Applies a diff to the label table.</span>
+
+<span class="sd">        A ``diff`` is a dictionary with three keys: ``add``, ``delete``</span>
+<span class="sd">        and ``change``. Each key should map to a list of labels.</span>
+
+<span class="sd">        ``add`` corresponds to the labels that are in ``new`` but not in</span>
+<span class="sd">        ``old``.</span>
+
+<span class="sd">        ``delete`` corresponds to the labels that are in ``old`` but not</span>
+<span class="sd">        in ``new``.</span>
+
+<span class="sd">        ``change`` corresponds to the labels that are in both ``old``</span>
+<span class="sd">        and ``new`` but have different coref/rating values.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="c"># add and change are easy---just put the labels.</span>
+        <span class="c"># delete is a little trickier. We need to scrub out the impact of</span>
+        <span class="c"># the previous label without actually deleting it. For this, we</span>
+        <span class="c"># use an unknown coref value.</span>
+        <span class="n">insert</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">diff</span><span class="p">[</span><span class="s">&#39;add&#39;</span><span class="p">]</span>
+            <span class="o">+</span> <span class="n">diff</span><span class="p">[</span><span class="s">&#39;change&#39;</span><span class="p">]</span>
+            <span class="o">+</span> <span class="p">[</span><span class="n">lab</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">CorefValue</span><span class="o">.</span><span class="n">Unknown</span><span class="p">)</span> <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">diff</span><span class="p">[</span><span class="s">&#39;delete&#39;</span><span class="p">]]</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="o">*</span><span class="n">insert</span><span class="p">)</span>
+
+</div>
 <span class="k">def</span> <span class="nf">unordered_pair_eq</span><span class="p">(</span><span class="n">pair1</span><span class="p">,</span> <span class="n">pair2</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Performs pairwise unordered equality.</span>
 
@@ -546,14 +953,6 @@
         <span class="k">return</span> <span class="n">y</span><span class="p">,</span> <span class="n">x</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span>
-
-
-<span class="k">def</span> <span class="nf">latest_labels</span><span class="p">(</span><span class="n">label_iterable</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Returns the most recent labels from a sorted iterable.&#39;&#39;&#39;</span>
-    <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">groupby</span><span class="p">(</span><span class="n">label_iterable</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">group</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">lab</span>
-            <span class="k">break</span>
 
 
 <span class="k">def</span> <span class="nf">expand_labels</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">subtopic</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
@@ -589,39 +988,6 @@
     <span class="n">connected_component</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
         <span class="n">ident1</span><span class="p">,</span> <span class="n">ident2</span> <span class="o">=</span> <span class="n">idents_from_label</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">subtopic</span><span class="o">=</span><span class="n">subtopic</span><span class="p">)</span>
-        <span class="n">data_backed</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">normalize_pair</span><span class="p">(</span><span class="n">ident1</span><span class="p">,</span> <span class="n">ident2</span><span class="p">))</span>
-        <span class="n">connected_component</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ident1</span><span class="p">)</span>
-        <span class="n">connected_component</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ident2</span><span class="p">)</span>
-
-    <span class="c"># We do not want to rebuild the Labels we already have,</span>
-    <span class="c"># because they have true annotator_id and subtopic</span>
-    <span class="c"># fields that we may want to preserve.</span>
-    <span class="k">for</span> <span class="n">ident1</span><span class="p">,</span> <span class="n">ident2</span> <span class="ow">in</span> <span class="n">combinations</span><span class="p">(</span><span class="n">connected_component</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">normalize_pair</span><span class="p">(</span><span class="n">ident1</span><span class="p">,</span> <span class="n">ident2</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">data_backed</span><span class="p">:</span>
-            <span class="p">(</span><span class="n">cid1</span><span class="p">,</span> <span class="n">subid1</span><span class="p">),</span> <span class="p">(</span><span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span><span class="p">)</span> <span class="o">=</span> <span class="n">ident1</span><span class="p">,</span> <span class="n">ident2</span>
-            <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">cid1</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">annotator</span><span class="p">,</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Positive</span><span class="p">,</span>
-                        <span class="n">subtopic_id1</span><span class="o">=</span><span class="n">subid1</span><span class="p">,</span> <span class="n">subtopic_id2</span><span class="o">=</span><span class="n">subid2</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">expand_labels_with_subtopics</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Expand a connected component of labels with subtopics.</span>
-
-<span class="sd">    This is just like ``expand_labels``, except it assumes that the</span>
-<span class="sd">    connected component given is a *subtopic* connected component.</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="n">labels</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">lab</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Positive</span> <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">)</span>
-
-    <span class="c"># Anything to expand?</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span>
-
-    <span class="n">annotator</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">annotator_id</span>
-
-    <span class="n">data_backed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-    <span class="n">connected_component</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
-        <span class="n">ident1</span><span class="p">,</span> <span class="n">ident2</span> <span class="o">=</span> <span class="n">idents_from_label</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
         <span class="n">data_backed</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">normalize_pair</span><span class="p">(</span><span class="n">ident1</span><span class="p">,</span> <span class="n">ident2</span><span class="p">))</span>
         <span class="n">connected_component</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ident1</span><span class="p">)</span>
         <span class="n">connected_component</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ident2</span><span class="p">)</span>
@@ -705,13 +1071,13 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" >Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
         &copy; Copyright 2014, Diffeo, Inc..
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3b2.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

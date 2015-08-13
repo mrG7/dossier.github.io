@@ -6,15 +6,15 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>dossier.store.store &mdash; dossier 0.3.0 documentation</title>
+    <title>dossier.store.store &mdash; dossier 0.3.4 documentation</title>
     
-    <link rel="stylesheet" href="../../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
     
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
-        VERSION:     '0.3.0',
+        VERSION:     '0.3.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,8 +23,8 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="dossier 0.3.0 documentation" href="../../../index.html" />
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
     <link rel="up" title="Module code" href="../../index.html" /> 
   </head>
   <body role="document">
@@ -37,8 +37,8 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -54,7 +54,7 @@
 <span class="sd">   Copyright 2012-2014 Diffeo, Inc.</span>
 <span class="sd">&#39;&#39;&#39;</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">imap</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
@@ -146,11 +146,12 @@
     <span class="n">INDEX_TABLE</span> <span class="o">=</span> <span class="s">&#39;fci&#39;</span>
 
     <span class="n">_kvlayer_namespace</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">TABLE</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,),</span>                <span class="c"># content_id -&gt; feature collection</span>
-        <span class="n">INDEX_TABLE</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">),</span> <span class="c"># idx name, value, content_id -&gt; NUL</span>
+        <span class="n">TABLE</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,),</span>                 <span class="c"># content_id -&gt; feature collection</span>
+        <span class="n">INDEX_TABLE</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">),</span>  <span class="c"># idx name, value, content_id -&gt; NUL</span>
     <span class="p">}</span>
 
     <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">,</span> <span class="n">impl</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">feature_indexes</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="bp">False</span><span class="p">,</span> <span class="s">&#39;deprecated&#39;</span>
         <span class="k">if</span> <span class="n">impl</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">Store</span><span class="p">,</span> <span class="n">cls</span><span class="p">)</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">,</span>
                                              <span class="n">feature_indexes</span><span class="o">=</span><span class="n">feature_indexes</span><span class="p">)</span>
@@ -168,11 +169,19 @@
 <span class="sd">        :type kvl: :class:`kvlayer.AbstractStorage`</span>
 <span class="sd">        :rtype: :class:`Store`</span>
 <span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">assert</span> <span class="bp">False</span><span class="p">,</span> <span class="s">&#39;deprecated&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_indexes</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
         <span class="n">kvlclient</span><span class="o">.</span><span class="n">setup_namespace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kvlayer_namespace</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span> <span class="o">=</span> <span class="n">kvlclient</span>
-        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">feature_indexes</span> <span class="ow">or</span> <span class="p">[]:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">define_index</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">feature_index</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">basic_transform</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">feature_indexes</span> <span class="ow">or</span> <span class="p">[]:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;only one mapping per index entry allowed&#39;</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">keys</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">x</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">define_index</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">feature_index</span><span class="p">(</span><span class="o">*</span><span class="n">features</span><span class="p">),</span> <span class="n">basic_transform</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="Store.get"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.Store.get">[docs]</a>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_id</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Retrieve a feature collection from the store.  This is the same as</span>
@@ -355,7 +364,7 @@
 <span class="sd">        :raises: :exc:`~exceptions.KeyError`</span>
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">(</span><span class="n">idx_name</span><span class="p">)[</span><span class="s">&#39;transform&#39;</span><span class="p">]</span>
-        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx_name</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">),</span> <span class="n">idx</span><span class="p">(</span><span class="n">val</span><span class="p">))</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx</span><span class="p">(</span><span class="n">val</span><span class="p">),</span> <span class="n">idx_name</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">))</span>
         <span class="n">keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">scan_keys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">INDEX_TABLE</span><span class="p">,</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">imap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="n">k</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">keys</span><span class="p">)</span>
 </div>
@@ -397,7 +406,7 @@
 
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_scan_prefix_impl</span><span class="p">(</span>
-            <span class="n">idx_name</span><span class="p">,</span> <span class="n">val_prefix</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">k</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">k</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+            <span class="n">idx_name</span><span class="p">,</span> <span class="n">val_prefix</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">k</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">k</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
 </div>
     <span class="k">def</span> <span class="nf">_index_scan_prefix_impl</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx_name</span><span class="p">,</span> <span class="n">val_prefix</span><span class="p">,</span> <span class="n">retfunc</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Implementation for index_scan_prefix and</span>
@@ -411,8 +420,8 @@
         <span class="n">val_prefix</span> <span class="o">=</span> <span class="n">idx</span><span class="p">(</span><span class="n">val_prefix</span><span class="p">)</span>
 
         <span class="n">idx_name</span> <span class="o">=</span> <span class="n">idx_name</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
-        <span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="n">val_prefix</span><span class="p">)</span>
-        <span class="n">e</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="n">val_prefix</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\xff</span><span class="s">&#39;</span><span class="p">)</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="p">(</span><span class="n">val_prefix</span><span class="p">,</span> <span class="n">idx_name</span><span class="p">)</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="p">(</span><span class="n">val_prefix</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\xff</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">idx_name</span><span class="p">)</span>
         <span class="n">keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">scan_keys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">INDEX_TABLE</span><span class="p">,</span> <span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">e</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">imap</span><span class="p">(</span><span class="n">retfunc</span><span class="p">,</span> <span class="n">keys</span><span class="p">)</span>
 
@@ -500,7 +509,7 @@
 <span class="sd">        :type val: unspecified (depends on the index, usually ``unicode``)</span>
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">(</span><span class="n">idx_name</span><span class="p">)[</span><span class="s">&#39;transform&#39;</span><span class="p">]</span>
-        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx_name</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">),</span> <span class="n">idx</span><span class="p">(</span><span class="n">val</span><span class="p">),</span> <span class="n">content_id</span><span class="p">)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx</span><span class="p">(</span><span class="n">val</span><span class="p">),</span> <span class="n">idx_name</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">),</span> <span class="n">content_id</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">INDEX_TABLE</span><span class="p">,</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s">&#39;0&#39;</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">_index_keys_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx_name</span><span class="p">,</span> <span class="o">*</span><span class="n">ids_and_fcs</span><span class="p">):</span>
@@ -522,7 +531,7 @@
             <span class="n">content_id</span> <span class="o">=</span> <span class="n">cid_fc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
             <span class="k">for</span> <span class="n">index_value</span> <span class="ow">in</span> <span class="n">icreate</span><span class="p">(</span><span class="n">itrans</span><span class="p">,</span> <span class="n">cid_fc</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">index_value</span><span class="p">:</span>
-                    <span class="k">yield</span> <span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="n">index_value</span><span class="p">,</span> <span class="n">content_id</span><span class="p">)</span>
+                    <span class="k">yield</span> <span class="p">(</span><span class="n">index_value</span><span class="p">,</span> <span class="n">idx_name</span><span class="p">,</span> <span class="n">content_id</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Returns index transforms for ``name``.</span>
@@ -585,13 +594,13 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" >Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
         &copy; Copyright 2014, Diffeo, Inc..
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3b2.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

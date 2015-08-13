@@ -1,0 +1,453 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.web.builder &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.web.builder</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;A builder for constructing DossierStack web applications.</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2012-2015 Diffeo, Inc.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">import</span> <span class="nn">bottle</span>
+
+<span class="kn">from</span> <span class="nn">dossier.web</span> <span class="kn">import</span> <span class="n">search_engines</span> <span class="k">as</span> <span class="n">builtin_engines</span>
+<span class="kn">from</span> <span class="nn">dossier.web.config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">dossier.web.filters</span> <span class="kn">import</span> <span class="n">already_labeled</span>
+<span class="kn">from</span> <span class="nn">dossier.web.routes</span> <span class="kn">import</span> <span class="n">app</span> <span class="k">as</span> <span class="n">default_app</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="WebBuilder"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder">[docs]</a><span class="k">class</span> <span class="nc">WebBuilder</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;A builder for constructing DossierStack web applications.</span>
+
+<span class="sd">    DossierStack web services have a lot of knobs, so instead of a single</span>
+<span class="sd">    function with a giant list of parameters, we get a &quot;builder&quot; that</span>
+<span class="sd">    lets one mutably construct data for building a web application.</span>
+
+<span class="sd">    These &quot;knobs&quot; include, but are not limited to: adding routes or other</span>
+<span class="sd">    Bottle applications, injecting services into routes, setting a URL</span>
+<span class="sd">    prefix and adding filters and search engines.</span>
+
+<span class="sd">    .. automethod:: __init__</span>
+<span class="sd">    .. automethod:: get_app</span>
+<span class="sd">    .. automethod:: mount</span>
+<span class="sd">    .. automethod:: set_config</span>
+<span class="sd">    .. automethod:: add_search_engine</span>
+<span class="sd">    .. automethod:: add_filter</span>
+<span class="sd">    .. automethod:: add_routes</span>
+<span class="sd">    .. automethod:: inject</span>
+<span class="sd">    .. automethod:: enable_cors</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+<div class="viewcode-block" id="WebBuilder.__init__"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">add_default_routes</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Introduce a new builder.</span>
+
+<span class="sd">        You can use method chaining to configure your web application</span>
+<span class="sd">        options. e.g.,</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            app = WebBuilder().enable_cors().get_app()</span>
+<span class="sd">            app.run()</span>
+
+<span class="sd">        This code will create a new Bottle web application that enables</span>
+<span class="sd">        CORS (Cross Origin Resource Sharing).</span>
+
+<span class="sd">        If ``add_default_routes`` is ``False``, then the default set of</span>
+<span class="sd">        routes in ``dossier.web.routes`` is not added. This is only useful</span>
+<span class="sd">        if you want to compose multiple Bottle applications constructed</span>
+<span class="sd">        through multiple instances of ``WebBuilder``.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="n">bottle</span><span class="o">.</span><span class="n">Bottle</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">search_engines</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;random&#39;</span><span class="p">:</span> <span class="n">builtin_engines</span><span class="o">.</span><span class="n">random</span><span class="p">,</span>
+            <span class="s">&#39;plain_index_scan&#39;</span><span class="p">:</span> <span class="n">builtin_engines</span><span class="o">.</span><span class="n">plain_index_scan</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filters</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;already_labeled&#39;</span><span class="p">:</span> <span class="n">already_labeled</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mount_prefix</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">if</span> <span class="n">add_default_routes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add_routes</span><span class="p">(</span><span class="n">default_app</span><span class="p">)</span>
+
+        <span class="c"># DEPRECATED. Remove. ---AG</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visid_to_dbid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dbid_to_visid</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.get_app"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.get_app">[docs]</a>    <span class="k">def</span> <span class="nf">get_app</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Eliminate the builder by producing a new Bottle application.</span>
+
+<span class="sd">        This should be the final call in your method chain. It uses all</span>
+<span class="sd">        of the built up options to create a new Bottle application.</span>
+
+<span class="sd">        :rtype: :class:`bottle.Bottle`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="c"># If the user never sets a config instance, then just create</span>
+            <span class="c"># a default.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">Config</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mount_prefix</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mount_prefix</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;url_prefix&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;config&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;kvlclient&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">kvlclient</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;store&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">store</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;label_store&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">label_store</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;search_engines&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">search_engines</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;filters&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">filters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;request&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">bottle</span><span class="o">.</span><span class="n">request</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;response&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">bottle</span><span class="o">.</span><span class="n">response</span><span class="p">)</span>
+
+        <span class="c"># DEPRECATED. Remove. ---AG</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;visid_to_dbid&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">visid_to_dbid</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;dbid_to_visid&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">dbid_to_visid</span><span class="p">)</span>
+
+        <span class="c"># Also DEPRECATED.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inject</span><span class="p">(</span><span class="s">&#39;label_hooks&#39;</span><span class="p">,</span> <span class="k">lambda</span><span class="p">:</span> <span class="p">[])</span>
+
+        <span class="c"># Load routes defined in entry points.</span>
+        <span class="k">for</span> <span class="n">extroute</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;external_routes&#39;</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="n">mod</span><span class="p">,</span> <span class="n">fun_name</span> <span class="o">=</span> <span class="n">extroute</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Loading external route: </span><span class="si">%s</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">extroute</span><span class="p">)</span>
+            <span class="n">fun</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">__import__</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="n">fromlist</span><span class="o">=</span><span class="p">[</span><span class="n">fun_name</span><span class="p">]),</span> <span class="n">fun_name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add_routes</span><span class="p">(</span><span class="n">fun</span><span class="p">())</span>
+
+        <span class="c"># This adds the `json=True` feature on routes, which always coerces</span>
+        <span class="c"># the output to JSON. Bottle, by default, only permits dictionaries</span>
+        <span class="c"># to be JSON, which is the correct behavior. (Because returning JSON</span>
+        <span class="c"># arrays is a hazard.)</span>
+        <span class="c">#</span>
+        <span class="c"># So we should fix the routes and then remove this. ---AG</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="n">JsonPlugin</span><span class="p">())</span>
+
+        <span class="c"># Throw away the app and return it. Because this is elimination!</span>
+        <span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mount_prefix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">root</span> <span class="o">=</span> <span class="n">bottle</span><span class="o">.</span><span class="n">Bottle</span><span class="p">()</span>
+            <span class="n">root</span><span class="o">.</span><span class="n">mount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mount_prefix</span><span class="p">,</span> <span class="n">app</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">root</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">app</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.mount"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.mount">[docs]</a>    <span class="k">def</span> <span class="nf">mount</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Mount the application on to the given URL prefix.</span>
+
+<span class="sd">        :param str prefix: A URL prefixi</span>
+<span class="sd">        :rtype: :class:`WebBuilder`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mount_prefix</span> <span class="o">=</span> <span class="n">prefix</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.set_config"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.set_config">[docs]</a>    <span class="k">def</span> <span class="nf">set_config</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config_instance</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Set the config instance.</span>
+
+<span class="sd">        By default, this is an instance of :class:`dossier.web.Config`,</span>
+<span class="sd">        which provides services like ``kvlclient`` and</span>
+<span class="sd">        ``label_store``. Custom services should probably subclass</span>
+<span class="sd">        :class:`dossier.web.Config`, but it&#39;s not strictly necessary so</span>
+<span class="sd">        long as it provides the same set of services (which are used</span>
+<span class="sd">        for dependency injection into Bottle routes).</span>
+
+<span class="sd">        :param config_instance: A config instance.</span>
+<span class="sd">        :type config_instance: :class:`dossier.web.Config`</span>
+<span class="sd">        :rtype: :class:`WebBuilder`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config_instance</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.add_search_engine"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.add_search_engine">[docs]</a>    <span class="k">def</span> <span class="nf">add_search_engine</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">engine</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Adds a search engine with the given name.</span>
+
+<span class="sd">        ``engine`` must be the **class** object rather than</span>
+<span class="sd">        an instance. The class *must* be a subclass of</span>
+<span class="sd">        :class:`dossier.web.SearchEngine`, which should provide a means</span>
+<span class="sd">        of obtaining recommendations given a query.</span>
+
+<span class="sd">        The ``engine`` must be a class so that its dependencies can be</span>
+<span class="sd">        injected when the corresponding route is executed by the user.</span>
+
+<span class="sd">        If ``engine`` is ``None``, then it removes a possibly existing</span>
+<span class="sd">        search engine named ``name``.</span>
+
+<span class="sd">        :param str name: The name of the search engine. This appears</span>
+<span class="sd">                         in the list of search engines provided to the</span>
+<span class="sd">                         user, and is how the search engine is invoked</span>
+<span class="sd">                         via REST.</span>
+<span class="sd">        :param engine: A search engine *class*.</span>
+<span class="sd">        :type engine: `type`</span>
+<span class="sd">        :rtype: :class:`WebBuilder`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">engine</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">search_engines</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">search_engines</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">engine</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.add_filter"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.add_filter">[docs]</a>    <span class="k">def</span> <span class="nf">add_filter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="nb">filter</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Adds a filter with the given name.</span>
+
+<span class="sd">        ``filter`` must be the **class** object rather than</span>
+<span class="sd">        an instance. The class *must* be a subclass of</span>
+<span class="sd">        :class:`dossier.web.Filter`, which should provide a means</span>
+<span class="sd">        of creating a predicate function.</span>
+
+<span class="sd">        The ``filter`` must be a class so that its dependencies can be</span>
+<span class="sd">        injected when the corresponding route is executed by the user.</span>
+
+<span class="sd">        If ``filter`` is ``None``, then it removes a possibly existing</span>
+<span class="sd">        filter named ``name``.</span>
+
+<span class="sd">        :param str name: The name of the filter. This is how the search engine</span>
+<span class="sd">                         is invoked via REST.</span>
+<span class="sd">        :param engine: A filter *class*.</span>
+<span class="sd">        :type engine: `type`</span>
+<span class="sd">        :rtype: :class:`WebBuilder`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filters</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">filter</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.add_routes"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.add_routes">[docs]</a>    <span class="k">def</span> <span class="nf">add_routes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">routes</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Merges a Bottle application into this one.</span>
+
+<span class="sd">        :param routes: A Bottle application or a sequence of routes.</span>
+<span class="sd">        :type routes: :class:`bottle.Bottle` or `[bottle route]`.</span>
+<span class="sd">        :rtype: :class:`WebBuilder`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="c"># Basically the same as `self.app.merge(routes)`, except this</span>
+        <span class="c"># changes the owner of the route so that plugins on `self.app`</span>
+        <span class="c"># apply to the routes given here.</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">routes</span><span class="p">,</span> <span class="n">bottle</span><span class="o">.</span><span class="n">Bottle</span><span class="p">):</span>
+            <span class="n">routes</span> <span class="o">=</span> <span class="n">routes</span><span class="o">.</span><span class="n">routes</span>
+        <span class="k">for</span> <span class="n">route</span> <span class="ow">in</span> <span class="n">routes</span><span class="p">:</span>
+            <span class="n">route</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">app</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">add_route</span><span class="p">(</span><span class="n">route</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.inject"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.inject">[docs]</a>    <span class="k">def</span> <span class="nf">inject</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">closure</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Injects ``closure()`` into ``name`` parameters in routes.</span>
+
+<span class="sd">        This sets up dependency injection for parameters named ``name``.</span>
+<span class="sd">        When a route is invoked that has a parameter ``name``, then</span>
+<span class="sd">        ``closure()`` is passed as that parameter&#39;s value.</span>
+
+<span class="sd">        (The closure indirection is so the caller can control the time</span>
+<span class="sd">        of construction for objects. For example, you may want to check</span>
+<span class="sd">        the health of a database connection.)</span>
+
+<span class="sd">        :param str name: Parameter name.</span>
+<span class="sd">        :param function closure: A function with no parameters.</span>
+<span class="sd">        :rtype: :class:`WebBuilder`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">install</span><span class="p">(</span><span class="n">create_injector</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">closure</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="WebBuilder.enable_cors"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.WebBuilder.enable_cors">[docs]</a>    <span class="k">def</span> <span class="nf">enable_cors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Enables Cross Origin Resource Sharing.</span>
+
+<span class="sd">        This makes sure the necessary headers are set so that this</span>
+<span class="sd">        web application&#39;s routes can be accessed from other origins.</span>
+
+<span class="sd">        :rtype: :class:`WebBuilder`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">def</span> <span class="nf">access_control_headers</span><span class="p">():</span>
+            <span class="n">bottle</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Access-Control-Allow-Origin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;*&#39;</span>
+            <span class="n">bottle</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Access-Control-Allow-Methods&#39;</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="s">&#39;GET, POST, PUT, DELETE, OPTIONS&#39;</span>
+            <span class="n">bottle</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Access-Control-Allow-Headers&#39;</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="s">&#39;Origin, X-Requested-With, Content-Type, Accept, Authorization&#39;</span>
+
+        <span class="k">def</span> <span class="nf">options_response</span><span class="p">(</span><span class="n">res</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">bottle</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s">&#39;OPTIONS&#39;</span><span class="p">:</span>
+                <span class="n">new_res</span> <span class="o">=</span> <span class="n">bottle</span><span class="o">.</span><span class="n">HTTPResponse</span><span class="p">()</span>
+                <span class="n">new_res</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Access-Control-Allow-Origin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;*&#39;</span>
+                <span class="n">new_res</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Access-Control-Allow-Methods&#39;</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">bottle</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="s">&#39;Access-Control-Request-Method&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+                <span class="n">new_res</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Access-Control-Allow-Headers&#39;</span><span class="p">]</span> <span class="o">=</span> \
+                    <span class="n">bottle</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="s">&#39;Access-Control-Request-Headers&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">new_res</span>
+            <span class="n">res</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Allow&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="s">&#39;, OPTIONS&#39;</span>
+            <span class="k">return</span> <span class="n">bottle</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">default_error_handler</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">add_hook</span><span class="p">(</span><span class="s">&#39;after_request&#39;</span><span class="p">,</span> <span class="n">access_control_headers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">error_handler</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="mi">405</span><span class="p">)]</span> <span class="o">=</span> <span class="n">options_response</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+    <span class="k">def</span> <span class="nf">set_visid_to_dbid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
+        <span class="s">&#39;DEPRECATED. DO NOT USE.&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visid_to_dbid</span> <span class="o">=</span> <span class="n">f</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="nf">set_dbid_to_visid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f</span><span class="p">):</span>
+        <span class="s">&#39;DEPRECATED. DO NOT USE.&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dbid_to_visid</span> <span class="o">=</span> <span class="n">f</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+</div>
+<span class="k">def</span> <span class="nf">create_injector</span><span class="p">(</span><span class="n">param_name</span><span class="p">,</span> <span class="n">fun_param_value</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Dependency injection with Bottle.</span>
+
+<span class="sd">    This creates a simple dependency injector that will map</span>
+<span class="sd">    ``param_name`` in routes to the value ``fun_param_value()``</span>
+<span class="sd">    each time the route is invoked.</span>
+
+<span class="sd">    ``fun_param_value`` is a closure so that it is lazily evaluated.</span>
+<span class="sd">    This is useful for handling thread local services like database</span>
+<span class="sd">    connections.</span>
+
+<span class="sd">    :param str param_name: name of function parameter to inject into</span>
+<span class="sd">    :param fun_param_value: the value to insert</span>
+<span class="sd">    :type fun_param_value: a closure that can be applied with zero</span>
+<span class="sd">                           arguments</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">class</span> <span class="nc">_</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+        <span class="n">api</span> <span class="o">=</span> <span class="mi">2</span>
+
+        <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">callback</span><span class="p">,</span> <span class="n">route</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">param_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getargspec</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">callback</span><span class="p">)[</span><span class="mi">0</span><span class="p">]:</span>
+                <span class="k">return</span> <span class="n">callback</span>
+
+            <span class="k">def</span> <span class="nf">_</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+                <span class="n">pval</span> <span class="o">=</span> <span class="n">fun_param_value</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">pval</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;service &quot;</span><span class="si">%s</span><span class="s">&quot; unavailable&#39;</span><span class="p">,</span> <span class="n">param_name</span><span class="p">)</span>
+                    <span class="n">bottle</span><span class="o">.</span><span class="n">abort</span><span class="p">(</span><span class="mi">503</span><span class="p">,</span> <span class="s">&#39;service &quot;</span><span class="si">%s</span><span class="s">&quot; unavailable&#39;</span> <span class="o">%</span> <span class="n">param_name</span><span class="p">)</span>
+                    <span class="k">return</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pval</span>
+                <span class="k">return</span> <span class="n">callback</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_</span>
+    <span class="k">return</span> <span class="n">_</span><span class="p">()</span>
+
+
+<span class="k">class</span> <span class="nc">JsonPlugin</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;A custom JSON plugin for Bottle.</span>
+
+<span class="sd">    Bottle has this functionality by default, but it is only triggered</span>
+<span class="sd">    when the return value of a route is a ``dict``. This permits the</span>
+<span class="sd">    programmer to write `json=True` into the route decorator, which</span>
+<span class="sd">    causes the response to *always* be JSON.</span>
+
+<span class="sd">    Basically, it just wraps the return value in ``json.dumps`` and</span>
+<span class="sd">    sets the HTTP content type header appropriately.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">api</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s">&#39;json_response&#39;</span>
+
+    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">callback</span><span class="p">,</span> <span class="n">route</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">route</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;json&#39;</span><span class="p">,</span> <span class="bp">False</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">callback</span>
+
+        <span class="k">def</span> <span class="nf">_</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="n">bottle</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">content_type</span> <span class="o">=</span> <span class="s">&#39;application/json&#39;</span>
+            <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">callback</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_</span>
+
+
+<span class="k">def</span> <span class="nf">add_cli_arguments</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="n">p</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--bottle-debug&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s">&#39;store_true&#39;</span><span class="p">,</span>
+                   <span class="n">help</span><span class="o">=</span><span class="s">&#39;Enable Bottle</span><span class="se">\&#39;</span><span class="s">s debug mode.&#39;</span><span class="p">)</span>
+    <span class="n">p</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--reload&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s">&#39;store_true&#39;</span><span class="p">,</span>
+                   <span class="n">help</span><span class="o">=</span><span class="s">&#39;Enable Bottle</span><span class="se">\&#39;</span><span class="s">s reloading functionality.&#39;</span><span class="p">)</span>
+    <span class="n">p</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--port&#39;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">8080</span><span class="p">)</span>
+    <span class="n">p</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--host&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s">&#39;localhost&#39;</span><span class="p">)</span>
+    <span class="n">p</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;--server&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s">&#39;wsgiref&#39;</span><span class="p">,</span>
+                   <span class="n">help</span><span class="o">=</span><span class="s">&#39;The web server to use. You only need to change this &#39;</span>
+                        <span class="s">&#39;if you</span><span class="se">\&#39;</span><span class="s">re running a production server.&#39;</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

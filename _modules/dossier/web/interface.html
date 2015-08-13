@@ -6,15 +6,15 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>dossier.web.interface &mdash; dossier 0.3.0 documentation</title>
+    <title>dossier.web.interface &mdash; dossier 0.3.4 documentation</title>
     
-    <link rel="stylesheet" href="../../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
     
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
-        VERSION:     '0.3.0',
+        VERSION:     '0.3.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,8 +23,8 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="dossier 0.3.0 documentation" href="../../../index.html" />
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
     <link rel="up" title="Module code" href="../../index.html" /> 
   </head>
   <body role="document">
@@ -37,8 +37,8 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -48,46 +48,240 @@
           <div class="body" role="main">
             
   <h1>Source code for dossier.web.interface</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Search engine and filter interfaces</span>
+<span class="sd">===================================</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2012-2014 Diffeo, Inc.</span>
+
+<span class="sd">.. autoclass:: SearchEngine</span>
+<span class="sd">    :show-inheritance:</span>
+<span class="sd">.. autoclass:: Filter</span>
+<span class="sd">    :show-inheritance:</span>
+<span class="sd">.. autoclass:: Queryable</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
 
 <span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="kn">import</span> <span class="nn">bottle</span>
+
+<span class="kn">from</span> <span class="nn">dossier.web</span> <span class="kn">import</span> <span class="n">util</span>
 
 
-<div class="viewcode-block" id="SearchEngine"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.SearchEngine">[docs]</a><span class="k">class</span> <span class="nc">SearchEngine</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+<div class="viewcode-block" id="Queryable"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.Queryable">[docs]</a><span class="k">class</span> <span class="nc">Queryable</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Queryable supports parameterization from URLs and config.</span>
+
+<span class="sd">    Queryable is meant to be subclassed by things that have two</span>
+<span class="sd">    fundamental things in common:</span>
+
+<span class="sd">      1. Requires a single query identifier.</span>
+<span class="sd">      2. Can be optionally configured from either user provided</span>
+<span class="sd">         URL parameters or admin provided configuration.</span>
+
+<span class="sd">    Queryable provides a common interface for these two things, while</span>
+<span class="sd">    also providing a way to declare a schema for the parameters. This</span>
+<span class="sd">    schema is used to convert values from the URL/config into typed</span>
+<span class="sd">    Python values.</span>
+
+<span class="sd">    **Parameter schema**</span>
+
+<span class="sd">    The ``param_schema`` class variable can define rudimentary type</span>
+<span class="sd">    conversion from strings to typed Python values such as ``unicode``</span>
+<span class="sd">    or ``int``.</span>
+
+<span class="sd">    ``param_schema`` is a dictionary that maps keys (parameter name) to</span>
+<span class="sd">    a parameter type. A parameter type is itself a dictionary with the</span>
+<span class="sd">    following keys:</span>
+
+<span class="sd">    **type**</span>
+<span class="sd">        Required. Must be one of ``&#39;bool&#39;``, ``&#39;int&#39;``,</span>
+<span class="sd">        ``&#39;float&#39;``, ``&#39;bytes&#39;`` or ``&#39;unicode&#39;``.</span>
+<span class="sd">    **min**</span>
+<span class="sd">        Optional for ``&#39;int&#39;`` and ``&#39;float&#39;`` types.</span>
+<span class="sd">        Specifies a minimum value.</span>
+<span class="sd">    **max**</span>
+<span class="sd">        Optional for ``&#39;int&#39;`` and ``&#39;float&#39;`` types.</span>
+<span class="sd">        Specifies a maximum value.</span>
+<span class="sd">    **encoding**</span>
+<span class="sd">        Specifies an encoding for ``&#39;unicode&#39;`` types.</span>
+
+<span class="sd">    If you want to inherit the schema of a parent class, then you</span>
+<span class="sd">    can use:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        param_schema = dict(ParentClass.param_schema, **{</span>
+<span class="sd">            # your extra types here</span>
+<span class="sd">        })</span>
+
+<span class="sd">    :ivar query_content_id: The query content id.</span>
+<span class="sd">    :ivar query_params: The raw query parameters,</span>
+<span class="sd">                        as a :class:`bottle.MultiDict`.</span>
+<span class="sd">    :ivar config_params: The raw configuration parameters.</span>
+<span class="sd">                         This must be maintained explicitly, but will</span>
+<span class="sd">                         be incorporated in the values for ``params``.</span>
+<span class="sd">                         If ``k`` is and ``config_params``, then</span>
+<span class="sd">                         ``k``&#39;s default value is ``config_params[k]``</span>
+<span class="sd">                         (which is overridden by ``query_params[k]`` if</span>
+<span class="sd">                         it exists).</span>
+<span class="sd">    :ivar params: The combined and typed values of ``query_params``</span>
+<span class="sd">                  and ``config_params``.</span>
+
+<span class="sd">    .. automethod:: __init__</span>
+<span class="sd">    .. automethod:: set_query_id</span>
+<span class="sd">    .. automethod:: set_query_params</span>
+<span class="sd">    .. automethod:: add_query_params</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">param_schema</span> <span class="o">=</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="Queryable.__init__"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.Queryable.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Creates a new instance of :class:`Queryable`.</span>
+
+<span class="sd">        This initializes a default empty state, where all parameter</span>
+<span class="sd">        dictionaries are empty and ``query_content_id`` is ``None``.</span>
+
+<span class="sd">        To take advantage of dependency injected configuration, you&#39;ll</span>
+<span class="sd">        want to write your own constructor that sets config parameters</span>
+<span class="sd">        explicitly:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            def __init__(self, param1=None, param2=5):</span>
+<span class="sd">                self.config_params = {</span>
+<span class="sd">                    &#39;param1&#39;: param1,</span>
+<span class="sd">                    &#39;param2&#39;: param2,</span>
+<span class="sd">                }</span>
+<span class="sd">                super(MyClass, self).__init__()</span>
+
+<span class="sd">        It&#39;s important to call the constructor after ``config_params``</span>
+<span class="sd">        has been set so that the schema is applied correctly.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;config_params&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">config_params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">apply_param_schema</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="Queryable.set_query_id"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.Queryable.set_query_id">[docs]</a>    <span class="k">def</span> <span class="nf">set_query_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_content_id</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Set the query id.</span>
+
+<span class="sd">        :param str query_content_id: The query content identifier.</span>
+<span class="sd">        :rtype: :class:`Queryable`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span> <span class="o">=</span> <span class="n">query_content_id</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="Queryable.set_query_params"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.Queryable.set_query_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_query_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Set the query parameters.</span>
+
+<span class="sd">        The query parameters should be a dictionary mapping keys to</span>
+<span class="sd">        strings or lists of strings.</span>
+
+<span class="sd">        :param query_params: query parameters</span>
+<span class="sd">        :type query_params: ``name |--&gt; (str | [str])``</span>
+<span class="sd">        :rtype: :class:`Queryable`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_params</span> <span class="o">=</span> <span class="n">as_multi_dict</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">apply_param_schema</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="Queryable.add_query_params"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.Queryable.add_query_params">[docs]</a>    <span class="k">def</span> <span class="nf">add_query_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Overwrite the given query parameters.</span>
+
+<span class="sd">        This is the same as :meth:`Queryable.set_query_params`,</span>
+<span class="sd">        except it overwrites existing parameters individually</span>
+<span class="sd">        whereas ``set_query_params`` deletes all existing key in</span>
+<span class="sd">        ``query_params``.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">query_params</span> <span class="o">=</span> <span class="n">as_multi_dict</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">query_params</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">query_params</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="n">k</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">apply_param_schema</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+    <span class="k">def</span> <span class="nf">apply_param_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Applies the schema defined to the given parameters.</span>
+
+<span class="sd">        This combines the values in ``config_params`` and</span>
+<span class="sd">        ``query_params``, and converts them to typed Python values per</span>
+<span class="sd">        ``param_schema``.</span>
+
+<span class="sd">        This is called automatically whenever the query parameters are</span>
+<span class="sd">        updated.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">def</span> <span class="nf">param_str</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">cons</span><span class="p">,</span> <span class="n">default</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">v</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">default</span>
+                <span class="k">return</span> <span class="n">cons</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">default</span>
+
+        <span class="k">def</span> <span class="nf">param_num</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">cons</span><span class="p">,</span> <span class="n">default</span><span class="p">,</span> <span class="n">minimum</span><span class="p">,</span> <span class="n">maximum</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">n</span> <span class="o">=</span> <span class="n">cons</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">default</span><span class="p">))</span>
+                <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">maximum</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">minimum</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">default</span>
+
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">schema</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;param_schema&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">default</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;default&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">))</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="k">if</span> <span class="n">schema</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;bool&#39;</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">param_str</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)),</span> <span class="bp">False</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">schema</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;int&#39;</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">param_num</span><span class="p">(</span>
+                    <span class="n">name</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">default</span><span class="p">,</span>
+                    <span class="n">minimum</span><span class="o">=</span><span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;min&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                    <span class="n">maximum</span><span class="o">=</span><span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;max&#39;</span><span class="p">,</span> <span class="mi">1000000</span><span class="p">))</span>
+            <span class="k">elif</span> <span class="n">schema</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;float&#39;</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">param_num</span><span class="p">(</span>
+                    <span class="n">name</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">default</span><span class="p">,</span>
+                    <span class="n">minimum</span><span class="o">=</span><span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;min&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                    <span class="n">maximum</span><span class="o">=</span><span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;max&#39;</span><span class="p">,</span> <span class="mi">1000000</span><span class="p">))</span>
+            <span class="k">elif</span> <span class="n">schema</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="s">&#39;bytes&#39;</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">param_str</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;cons&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">),</span> <span class="n">default</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">schema</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="s">&#39;unicode&#39;</span><span class="p">:</span>
+                <span class="n">encoding</span> <span class="o">=</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;encoding&#39;</span><span class="p">,</span> <span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">param_str</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">encoding</span><span class="p">),</span> <span class="n">default</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+
+</div>
+<div class="viewcode-block" id="SearchEngine"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.SearchEngine">[docs]</a><span class="k">class</span> <span class="nc">SearchEngine</span><span class="p">(</span><span class="n">Queryable</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Defines an interface for search engines.</span>
 
 <span class="sd">    A search engine, at a high level, takes a query feature collection</span>
 <span class="sd">    and returns a list of results, where each result is itself a</span>
 <span class="sd">    feature collection.</span>
 
-<span class="sd">    More generally, a search engine is a :class:`yakonfig.Configurable`</span>
-<span class="sd">    object (or one that can be auto-configured) that returns a callable</span>
-<span class="sd">    that performs the actual searching.</span>
+<span class="sd">    Note that this is an abstract class. Implementors must provide the</span>
+<span class="sd">    :meth:`SearchEngine.recommendations` method.</span>
 
-<span class="sd">    Here&#39;s an example of a simple search engine that returns the</span>
-<span class="sd">    results of an index scan:</span>
-
-<span class="sd">    .. code-block:: python</span>
-
-<span class="sd">        def search_by_name(store):</span>
-<span class="sd">            def _(content_id, filter_pred, limit):</span>
-<span class="sd">                fc = store.get(content_id)</span>
-<span class="sd">                cids = []</span>
-<span class="sd">                for name in fc.get(u&#39;NAME&#39;):</span>
-<span class="sd">                    cids.extend(store.index_scan(u&#39;NAME&#39;, name))</span>
-<span class="sd">                results = list(filter(filter_pred, store.get_many(cids)))</span>
-<span class="sd">                return {</span>
-<span class="sd">                    &#39;results&#39;: results[0:int(limit)],</span>
-<span class="sd">                }</span>
-<span class="sd">            return _</span>
-
-<span class="sd">    .. automethod:: dossier.web.SearchEngine.__init__</span>
-<span class="sd">    .. automethod:: dossier.web.SearchEngine.__call__</span>
+<span class="sd">    .. automethod:: __init__</span>
+<span class="sd">    .. automethod:: recommendations</span>
+<span class="sd">    .. automethod:: results</span>
+<span class="sd">    .. automethod:: respond</span>
+<span class="sd">    .. automethod:: add_filter</span>
+<span class="sd">    .. automethod:: create_filter_predicate</span>
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">__metaclass__</span> <span class="o">=</span> <span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span>
 
-    <span class="nd">@abc.abstractmethod</span>
-<div class="viewcode-block" id="SearchEngine.__init__"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.SearchEngine.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">param_schema</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s">&#39;limit&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;int&#39;</span><span class="p">,</span> <span class="s">&#39;default&#39;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mi">1000000</span><span class="p">},</span>
+        <span class="s">&#39;omit_fc&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;bool&#39;</span><span class="p">,</span> <span class="s">&#39;default&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+    <span class="p">}</span>
+
+<div class="viewcode-block" id="SearchEngine.__init__"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.SearchEngine.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Create a new search engine.</span>
 
 <span class="sd">        The creation of a search engine is distinct from the operation</span>
@@ -96,169 +290,151 @@
 <span class="sd">        are special in that they will be automatically populated with</span>
 <span class="sd">        special values if present in your ``__init__``:</span>
 
-<span class="sd">        * **kvlclient**:</span>
-<span class="sd">          :class:`kvlayer._abstract_storage.AbstractStorage`</span>
+<span class="sd">        * **kvlclient**: :class:`kvlayer._abstract_storage.AbstractStorage`</span>
 <span class="sd">        * **store**: :class:`dossier.store.Store`</span>
 <span class="sd">        * **label_store**: :class:`dossier.label.LabelStore`</span>
+
+<span class="sd">        If you want to expand the set of items that can be injected,</span>
+<span class="sd">        then you must subclass :class:`dossier.web.Config`, define your</span>
+<span class="sd">        new services as instance attributes, and set your new config</span>
+<span class="sd">        instance with :meth:`dossier.web.Config.set_config`.</span>
 
 <span class="sd">        :rtype: A callable with a signature isomorphic to</span>
 <span class="sd">                :meth:`dossier.web.SearchEngine.__call__`.</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">pass</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SearchEngine</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_filters</span> <span class="o">=</span> <span class="p">{}</span>
+</div>
+<div class="viewcode-block" id="SearchEngine.add_filter"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.SearchEngine.add_filter">[docs]</a>    <span class="k">def</span> <span class="nf">add_filter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="nb">filter</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Add a filter to this search engine.</span>
+
+<span class="sd">        :param filter: A filter.</span>
+<span class="sd">        :type filter: :class:`Filter`</span>
+<span class="sd">        :rtype: :class:`SearchEngine`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_filters</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">filter</span>
+        <span class="k">return</span> <span class="bp">self</span>
+</div>
+<div class="viewcode-block" id="SearchEngine.create_filter_predicate"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.SearchEngine.create_filter_predicate">[docs]</a>    <span class="k">def</span> <span class="nf">create_filter_predicate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Creates a filter predicate.</span>
+
+<span class="sd">        The list of available filters is given by calls to</span>
+<span class="sd">        ``add_filter``, and the list of filters to use is given by</span>
+<span class="sd">        parameters in ``params``.</span>
+
+<span class="sd">        In this default implementation, multiple filters can be</span>
+<span class="sd">        specified with the ``filter`` parameter. Each filter is</span>
+<span class="sd">        initialized with the same set of query parameters given to the</span>
+<span class="sd">        search engine.</span>
+
+<span class="sd">        The returned function accepts a ``(content_id, FC)`` and</span>
+<span class="sd">        returns ``True`` if and only if every selected predicate</span>
+<span class="sd">        returns ``True`` on the same input.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">,</span> \
+            <span class="s">&#39;must call SearchEngine.set_query_id first&#39;</span>
+
+        <span class="n">filter_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s">&#39;filter&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">filter_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="s">&#39;already_labeled&#39;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filters</span><span class="p">:</span>
+            <span class="n">filter_names</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;already_labeled&#39;</span><span class="p">]</span>
+        <span class="n">init_filters</span> <span class="o">=</span> <span class="p">[(</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filters</span><span class="p">[</span><span class="n">n</span><span class="p">])</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">filter_names</span><span class="p">]</span>
+        <span class="n">preds</span> <span class="o">=</span> <span class="p">[</span><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">init_filters</span><span class="p">:</span>
+            <span class="n">preds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">set_query_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">)</span>
+                          <span class="o">.</span><span class="n">set_query_params</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="p">)</span>
+                          <span class="o">.</span><span class="n">create_predicate</span><span class="p">())</span>
+        <span class="k">return</span> <span class="k">lambda</span> <span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">):</span> <span class="n">fc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">p</span><span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">))</span>
+                                                        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">preds</span><span class="p">)</span>
 </div>
     <span class="nd">@abc.abstractmethod</span>
-<div class="viewcode-block" id="SearchEngine.__call__"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.SearchEngine.__call__">[docs]</a>    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="n">content_id</span><span class="p">,</span> <span class="n">filter_pred</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Run a search engine.</span>
+<div class="viewcode-block" id="SearchEngine.recommendations"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.SearchEngine.recommendations">[docs]</a>    <span class="k">def</span> <span class="nf">recommendations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Return recommendations.</span>
 
-<span class="sd">        This method runs a search engine with the query ``content_id``</span>
-<span class="sd">        and returns a result set of feature collections.</span>
-
-<span class="sd">        ``content_id`` will correspond to a feature collection</span>
-<span class="sd">        accessible via a :class:`dossier.store.Store`. Note</span>
-<span class="sd">        that ``content_id`` may not point to any existing</span>
-<span class="sd">        :class:`dossier.fc.FeatureCollection`. If a feature collection</span>
-<span class="sd">        does not exist, a search engine may invent one or simply return</span>
-<span class="sd">        no results.</span>
-
-<span class="sd">        ``filter_pred`` is a predicate that returns ``True`` given a</span>
-<span class="sd">        (``content_id``, :class:`dossier.fc.FeatureCollection`) if and</span>
-<span class="sd">        only if that object should appear in the results.  Typically,</span>
-<span class="sd">        this filtering predicate is used to make sure already labeled</span>
-<span class="sd">        feature collections don&#39;t re-appear.</span>
-
-<span class="sd">        ``limit`` is an integer that determines how many results the</span>
-<span class="sd">        user wants to handle. Search engines may assume that this is</span>
-<span class="sd">        capped at a reasonable maximum.</span>
-
-<span class="sd">        Finally, any additional query parameters in the URL are passed</span>
-<span class="sd">        as keyword arguments, which will all be strings.</span>
+<span class="sd">        The return type is loosely specified. In particular, it must</span>
+<span class="sd">        be a dictionary with at least one key, ``results``, which maps</span>
+<span class="sd">        to a list of tuples of ``(content_id, FC)``. The returned</span>
+<span class="sd">        dictionary may contain other keys.</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">pass</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="SearchEngine.results"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.SearchEngine.results">[docs]</a>    <span class="k">def</span> <span class="nf">results</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns results as a JSON encodable Python value.</span>
+
+<span class="sd">        This calls :meth:`SearchEngine.recommendations` and converts</span>
+<span class="sd">        the results returned into JSON encodable values. Namely,</span>
+<span class="sd">        feature collections are slimmed down to only features that</span>
+<span class="sd">        are useful to an end-user.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recommendations</span><span class="p">()</span>
+        <span class="n">transformed</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">results</span><span class="p">[</span><span class="s">&#39;results&#39;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">cid</span><span class="p">,</span> <span class="n">fc</span> <span class="o">=</span> <span class="n">t</span>
+                <span class="n">info</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">t</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">bottle</span><span class="o">.</span><span class="n">abort</span><span class="p">(</span><span class="mi">500</span><span class="p">,</span> <span class="s">&#39;Invalid search result: &quot;</span><span class="si">%r</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="n">t</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">info</span>
+            <span class="n">result</span><span class="p">[</span><span class="s">&#39;content_id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cid</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s">&#39;omit_fc&#39;</span><span class="p">]:</span>
+                <span class="n">result</span><span class="p">[</span><span class="s">&#39;fc&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">util</span><span class="o">.</span><span class="n">fc_to_json</span><span class="p">(</span><span class="n">fc</span><span class="p">)</span>
+            <span class="n">transformed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+        <span class="n">results</span><span class="p">[</span><span class="s">&#39;results&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">transformed</span>
+        <span class="k">return</span> <span class="n">results</span>
+</div>
+<div class="viewcode-block" id="SearchEngine.respond"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.SearchEngine.respond">[docs]</a>    <span class="k">def</span> <span class="nf">respond</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Perform the actual web response.</span>
+
+<span class="sd">        This is usually just a JSON encoded dump of the search results,</span>
+<span class="sd">        but implementors may choose to implement this differently</span>
+<span class="sd">        (e.g., with a cache).</span>
+
+<span class="sd">        :param response: A web response object.</span>
+<span class="sd">        :type response: :class:`bottle.Response`</span>
+<span class="sd">        :rtype: `str`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">content_type</span> <span class="o">=</span> <span class="s">&#39;application/json&#39;</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">())</span>
 
 </div></div>
-<div class="viewcode-block" id="Filter"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.Filter">[docs]</a><span class="k">class</span> <span class="nc">Filter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;A filter predicate for results returned by search engines.</span>
+<div class="viewcode-block" id="Filter"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.Filter">[docs]</a><span class="k">class</span> <span class="nc">Filter</span><span class="p">(</span><span class="n">Queryable</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;A filter for results returned by search engines.</span>
 
-<span class="sd">    A filter predicate is a :class:`yakonfig.Configurable` object</span>
+<span class="sd">    A filter is a :class:`yakonfig.Configurable` object</span>
 <span class="sd">    (or one that can be auto-configured) that returns a callable</span>
 <span class="sd">    for creating a predicate that will filter results produced by</span>
 <span class="sd">    a search engine.</span>
 
-<span class="sd">    The predicate should be a function that accepts a tuple</span>
-<span class="sd">    (``content_id``, :class:`dossier.fc.FeatureCollection`) and returns</span>
-<span class="sd">    ``True`` if and only if that result should be included in the</span>
-<span class="sd">    recommendations presented to the user.</span>
+<span class="sd">    A filter has one abstract method: :meth:`Filter.create_predicate`.</span>
 
-<span class="sd">    Here is how the :func:`dossier.web.filter_already_labeled` filter</span>
-<span class="sd">    is written:</span>
-
-<span class="sd">    .. code-block:: python</span>
-
-<span class="sd">        def already_labeled(label_store):</span>
-<span class="sd">            def init_filter(query_content_id):</span>
-<span class="sd">                labeled = label_store.directly_connected(</span>
-<span class="sd">                    query_content_id)</span>
-<span class="sd">                labeled_cids = {label.other(query_content_id)</span>
-<span class="sd">                                for label in labeled}</span>
-<span class="sd">                def p((content_id, fc)):</span>
-<span class="sd">                    return content_id not in labeled_cids</span>
-<span class="sd">                return p</span>
-<span class="sd">            return init_filter</span>
-
-<span class="sd">    Note that fetching all of the labels before running the predicate</span>
-<span class="sd">    is critical for this to perform well.</span>
+<span class="sd">    .. automethod:: create_predicate</span>
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">__metaclass__</span> <span class="o">=</span> <span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span>
 
     <span class="nd">@abc.abstractmethod</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Create a new filter.</span>
+<div class="viewcode-block" id="Filter.create_predicate"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.interface.Filter.create_predicate">[docs]</a>    <span class="k">def</span> <span class="nf">create_predicate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Creates a predicate for this filter.</span>
 
-<span class="sd">        The creation of a filter is distinct from the operation of</span>
-<span class="sd">        a filter. Namely, the creation of a filter is subject to</span>
-<span class="sd">        dependency injection. The following parameters are special in</span>
-<span class="sd">        that they will be automatically populated with special values</span>
-<span class="sd">        if present in your ``__init__``:</span>
-
-<span class="sd">        * **kvlclient**:</span>
-<span class="sd">          :class:`kvlayer._abstract_storage.AbstractStorage`</span>
-<span class="sd">        * **store**: :class:`dossier.store.Store`</span>
-<span class="sd">        * **label_store**: :class:`dossier.label.LabelStore`</span>
-
-<span class="sd">        :rtype: A callable with a signature isomorphic to</span>
-<span class="sd">                :meth:`dossier.web.Filter.__call__`.</span>
+<span class="sd">        The predicate should accept a tuple of ``(content_id, FC)``</span>
+<span class="sd">        and return ``True`` if and only if the given result should be</span>
+<span class="sd">        included in the list of recommendations provided to the user.</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">pass</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
 
-    <span class="nd">@abc.abstractmethod</span>
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_content_id</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Create a filter predicate function.</span>
-
-<span class="sd">        The reason for the extra level of indirection is so that you</span>
-<span class="sd">        may run &quot;initialization&quot; code for a particular query. See</span>
-<span class="sd">        :meth:`dossier.web.Filter` for an example.</span>
-
-<span class="sd">        :param str query_content_id: The content id of the query.</span>
-<span class="sd">                                     This *may* correspond to an existing</span>
-<span class="sd">                                     feature collection.</span>
-<span class="sd">        :rtype: A function with type</span>
-<span class="sd">                ``(content_id, FeatureCollection) -&gt; bool``.</span>
-<span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">pass</span>
-
-</div>
-<div class="viewcode-block" id="Route"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.Route">[docs]</a><span class="k">class</span> <span class="nc">Route</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Defines an interface for web routes.</span>
-
-<span class="sd">    A web route is a function that receives HTTP requests and returns</span>
-<span class="sd">    HTTP responses.</span>
-
-<span class="sd">    You may add your own routes to a ``dossier.web`` application by</span>
-<span class="sd">    defining Python objects that conform to the interface defined here</span>
-<span class="sd">    (they do not need to subclass this class).</span>
-
-<span class="sd">    .. automethod:: dossier.web.Route.__init__</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="n">__metaclass__</span> <span class="o">=</span> <span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span>
-
-    <span class="nd">@abc.abstractmethod</span>
-<div class="viewcode-block" id="Route.__init__"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.Route.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bottle_app</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Add routes to an existing Bottle application.</span>
-
-<span class="sd">        This interface permits one to add new routes to the</span>
-<span class="sd">        Bottle application used by ``dossier.web``. For example:</span>
-
-<span class="sd">        .. code-block:: python</span>
-
-<span class="sd">            def my_route(bottle_app):</span>
-<span class="sd">                @bottle_app.get(&#39;/visit-me&#39;)</span>
-<span class="sd">                def bottle_route():</span>
-<span class="sd">                    return &#39;Hello, world!&#39;</span>
-
-<span class="sd">            # Use it in the application.</span>
-<span class="sd">            _, app = get_application(routes=[my_route])</span>
-
-<span class="sd">        ``dossier.web`` also configures dependency injection for your</span>
-<span class="sd">        routes. The following is a list of special parameter names that</span>
-<span class="sd">        can appear in your route function. They will be automatically</span>
-<span class="sd">        populated with values of the following types:</span>
-
-<span class="sd">        * **config**: :class:`dossier.web.Config`</span>
-<span class="sd">        * **kvlclient**:</span>
-<span class="sd">          :class:`kvlayer._abstract_storage.AbstractStorage`</span>
-<span class="sd">        * **store**: :class:`dossier.store.Store`</span>
-<span class="sd">        * **label_store**: :class:`dossier.label.LabelStore`</span>
-<span class="sd">        * **search_engines**: ``list`` of search engines (which are</span>
-<span class="sd">          duck typed to :class:`dossier.web.SearchEngine`).</span>
-<span class="sd">        * **filter_preds**: ``list`` of filter predicates (which are</span>
-<span class="sd">          duck typed to :class:`dossier.web.Filter`).</span>
-<span class="sd">        * **request**: :class:`bottle.Request`</span>
-<span class="sd">        * **response**: :class:`bottle.Response`</span>
-
-<span class="sd">        :param bottle_app: A Bottle application.</span>
-<span class="sd">        :type bottle_app: :class:`bottle.Bottle`</span>
-<span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">pass</span></div></div>
+</div></div>
+<span class="k">def</span> <span class="nf">as_multi_dict</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="s">&#39;Coerce a dictionary to a bottle.MultiDict&#39;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">bottle</span><span class="o">.</span><span class="n">MultiDict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">d</span>
+    <span class="n">md</span> <span class="o">=</span> <span class="n">bottle</span><span class="o">.</span><span class="n">MultiDict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">v</span><span class="p">:</span>
+                <span class="n">md</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">md</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+    <span class="k">return</span> <span class="n">md</span>
 </pre></div>
 
           </div>
@@ -292,13 +468,13 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" >Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
         &copy; Copyright 2014, Diffeo, Inc..
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3b2.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

@@ -6,15 +6,15 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>3. dossier.label — store ground truth data as labels &mdash; dossier 0.3.0 documentation</title>
+    <title>3. dossier.label — store ground truth data as labels &mdash; dossier 0.3.4 documentation</title>
     
-    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
-        VERSION:     '0.3.0',
+        VERSION:     '0.3.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,8 +23,8 @@
     <script type="text/javascript" src="_static/jquery.js"></script>
     <script type="text/javascript" src="_static/underscore.js"></script>
     <script type="text/javascript" src="_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="dossier 0.3.0 documentation" href="index.html" />
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="index.html" />
     <link rel="next" title="4. dossier.models — Active learning" href="dossier.models.html" />
     <link rel="prev" title="2. dossier.store — store feature collections" href="dossier.store.html" /> 
   </head>
@@ -44,7 +44,7 @@
         <li class="right" >
           <a href="dossier.store.html" title="2. dossier.store — store feature collections"
              accesskey="P">previous</a> |</li>
-        <li><a href="index.html">dossier 0.3.0 documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">dossier 0.3.4 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -122,7 +122,7 @@ configuration setup.</p>
 
 <dl class="method">
 <dt id="dossier.label.LabelStore.put">
-<code class="descname">put</code><span class="sig-paren">(</span><em>label</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#LabelStore.put"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.LabelStore.put" title="Permalink to this definition">¶</a></dt>
+<code class="descname">put</code><span class="sig-paren">(</span><em>*labels</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#LabelStore.put"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.LabelStore.put" title="Permalink to this definition">¶</a></dt>
 <dd><p>Add a new label to the store.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -140,8 +140,10 @@ configuration setup.</p>
 <dd><p>Retrieve a label from the store.</p>
 <p>When <code class="docutils literal"><span class="pre">subid1</span></code> and <code class="docutils literal"><span class="pre">subid2</span></code> are empty, then a label without
 subtopic identifiers will be returned.</p>
-<p>Note that the combination of content ids, subtopic ids and
-an annotator id <em>uniquely</em> identifies a label.</p>
+<p>If there are multiple labels stored with the same parts,
+the single most recent one will be returned.  If there are
+no labels with these parts, <a class="reference external" href="http://docs.python.org/library/exceptions.html#exceptions.KeyError" title="(in Python v2.7)"><code class="xref py py-exc docutils literal"><span class="pre">exceptions.KeyError</span></code></a> will
+be raised.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -249,10 +251,16 @@ the connected component.</p>
 
 <dl class="method">
 <dt id="dossier.label.LabelStore.everything">
-<code class="descname">everything</code><span class="sig-paren">(</span><em>include_deleted=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#LabelStore.everything"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.LabelStore.everything" title="Permalink to this definition">¶</a></dt>
+<code class="descname">everything</code><span class="sig-paren">(</span><em>include_deleted=False</em>, <em>content_id=None</em>, <em>subtopic_id=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#LabelStore.everything"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.LabelStore.everything" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns a generator of all labels in the store.</p>
-<p>If <code class="docutils literal"><span class="pre">include_deleted</span></code> is <code class="docutils literal"><span class="pre">True</span></code>, labels that have been
-deleted are also included.</p>
+<p>If <cite>include_deleted</cite> is <code class="xref py py-const docutils literal"><span class="pre">True</span></code>, labels that have been
+overwritten with more recent labels are also included.  If
+<cite>content_id</cite> is not <code class="xref py py-const docutils literal"><span class="pre">None</span></code>, only labels for that
+content ID are retrieved; and then if <cite>subtopic_id</cite> is not
+<code class="xref py py-const docutils literal"><span class="pre">None</span></code>, only that subtopic is retrieved, else all
+subtopics are retrieved.  The returned labels will always be
+in sorted order, content IDs first, and with those with the
+same content, subtopic, and annotator IDs sorted newest first.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -273,61 +281,90 @@ deleted are also included.</p>
 
 <dl class="class">
 <dt id="dossier.label.Label">
-<em class="property">class </em><code class="descclassname">dossier.label.</code><code class="descname">Label</code><a class="reference internal" href="_modules/dossier/label/label.html#Label"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label" title="Permalink to this definition">¶</a></dt>
-<dd><p>A label is an immutable unit of ground truth data.</p>
-<dl class="staticmethod">
-<dt id="dossier.label.Label.__new__">
-<em class="property">static </em><code class="descname">__new__</code><span class="sig-paren">(</span><em>content_id1</em>, <em>content_id2</em>, <em>annotator_id</em>, <em>value</em>, <em>subtopic_id1=None</em>, <em>subtopic_id2=None</em>, <em>epoch_ticks=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.__new__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.__new__" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<em class="property">class </em><code class="descclassname">dossier.label.</code><code class="descname">Label</code><span class="sig-paren">(</span><em>content_id1</em>, <em>content_id2</em>, <em>annotator_id</em>, <em>value</em>, <em>subtopic_id1=None</em>, <em>subtopic_id2=None</em>, <em>epoch_ticks=None</em>, <em>rating=None</em>, <em>meta=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label" title="Permalink to this definition">¶</a></dt>
+<dd><p>An immutable unit of ground truth data.</p>
+<p>This is a statement that the item at <a class="reference internal" href="#dossier.label.Label.content_id1" title="dossier.label.Label.content_id1"><code class="xref py py-attr docutils literal"><span class="pre">content_id1</span></code></a>,
+<a class="reference internal" href="#dossier.label.Label.subtopic_id1" title="dossier.label.Label.subtopic_id1"><code class="xref py py-attr docutils literal"><span class="pre">subtopic_id1</span></code></a> refers to (or doesn&#8217;t) the same thing as the
+item at <a class="reference internal" href="#dossier.label.Label.content_id2" title="dossier.label.Label.content_id2"><code class="xref py py-attr docutils literal"><span class="pre">content_id2</span></code></a>, <a class="reference internal" href="#dossier.label.Label.subtopic_id2" title="dossier.label.Label.subtopic_id2"><code class="xref py py-attr docutils literal"><span class="pre">subtopic_id2</span></code></a>.  This assertion
+was recorded by <a class="reference internal" href="#dossier.label.Label.annotator_id" title="dossier.label.Label.annotator_id"><code class="xref py py-attr docutils literal"><span class="pre">annotator_id</span></code></a>, a string identifying a user,
+at <a class="reference internal" href="#dossier.label.Label.epoch_ticks" title="dossier.label.Label.epoch_ticks"><code class="xref py py-attr docutils literal"><span class="pre">epoch_ticks</span></code></a>, with <a class="reference internal" href="#dossier.label.CorefValue" title="dossier.label.CorefValue"><code class="xref py py-class docutils literal"><span class="pre">CorefValue</span></code></a> <a class="reference internal" href="#dossier.label.Label.value" title="dossier.label.Label.value"><code class="xref py py-attr docutils literal"><span class="pre">value</span></code></a>.</p>
+<p>On creation, the tuple is normalized such that the pair of
+<cite>content_id1</cite> and <cite>subtopic_id1</cite> are less than the pair of
+<cite>content_id2</cite> and <cite>subtopic_id2</cite>.</p>
+<p>Labels are comparable, sortable, and hashable.  The sort order
+compares the two content IDs, the two subtopic IDs,
+<a class="reference internal" href="#dossier.label.Label.annotator_id" title="dossier.label.Label.annotator_id"><code class="xref py py-attr docutils literal"><span class="pre">annotator_id</span></code></a>, <a class="reference internal" href="#dossier.label.Label.epoch_ticks" title="dossier.label.Label.epoch_ticks"><code class="xref py py-attr docutils literal"><span class="pre">epoch_ticks</span></code></a> (most recent is
+smallest), and then other fields.</p>
+<dl class="attribute">
+<dt id="dossier.label.Label.content_id1">
+<code class="descname">content_id1</code><a class="headerlink" href="#dossier.label.Label.content_id1" title="Permalink to this definition">¶</a></dt>
+<dd><p>The first content ID.</p>
+</dd></dl>
 
-<dl class="method">
-<dt id="dossier.label.Label.reversed">
-<code class="descname">reversed</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.reversed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.reversed" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a new label with ids swapped.</p>
-<p>This method satisfies the following law: for every label
-<code class="docutils literal"><span class="pre">lab</span></code>, <code class="docutils literal"><span class="pre">lab</span> <span class="pre">==</span> <span class="pre">lab.reversed()</span></code>.</p>
+<dl class="attribute">
+<dt id="dossier.label.Label.content_id2">
+<code class="descname">content_id2</code><a class="headerlink" href="#dossier.label.Label.content_id2" title="Permalink to this definition">¶</a></dt>
+<dd><p>The second content ID.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="dossier.label.Label.annotator_id">
+<code class="descname">annotator_id</code><a class="headerlink" href="#dossier.label.Label.annotator_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>An identifier of the user making this assertion.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="dossier.label.Label.value">
+<code class="descname">value</code><a class="headerlink" href="#dossier.label.Label.value" title="Permalink to this definition">¶</a></dt>
+<dd><p>A <a class="reference internal" href="#dossier.label.CorefValue" title="dossier.label.CorefValue"><code class="xref py py-class docutils literal"><span class="pre">CorefValue</span></code></a> stating whether this is a positive or
+negative coreference assertion.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="dossier.label.Label.subtopic_id1">
+<code class="descname">subtopic_id1</code><a class="headerlink" href="#dossier.label.Label.subtopic_id1" title="Permalink to this definition">¶</a></dt>
+<dd><p>An identifier defining a section or region of
+<a class="reference internal" href="#dossier.label.Label.content_id1" title="dossier.label.Label.content_id1"><code class="xref py py-attr docutils literal"><span class="pre">content_id1</span></code></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="dossier.label.Label.subtopic_id2">
+<code class="descname">subtopic_id2</code><a class="headerlink" href="#dossier.label.Label.subtopic_id2" title="Permalink to this definition">¶</a></dt>
+<dd><p>An identifier defining a section or region of
+<a class="reference internal" href="#dossier.label.Label.content_id2" title="dossier.label.Label.content_id2"><code class="xref py py-attr docutils literal"><span class="pre">content_id2</span></code></a>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="dossier.label.Label.epoch_ticks">
+<code class="descname">epoch_ticks</code><a class="headerlink" href="#dossier.label.Label.epoch_ticks" title="Permalink to this definition">¶</a></dt>
+<dd><p>The time at which <a class="reference internal" href="#dossier.label.Label.annotator_id" title="dossier.label.Label.annotator_id"><code class="xref py py-attr docutils literal"><span class="pre">annotator_id</span></code></a> made this assertion,
+in seconds since the Unix epoch.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="dossier.label.Label.rating">
+<code class="descname">rating</code><a class="headerlink" href="#dossier.label.Label.rating" title="Permalink to this definition">¶</a></dt>
+<dd><p>An additional score showing the relative importance of this
+label, mirroring <code class="xref py py-class docutils literal"><span class="pre">streamcorpus.Rating</span></code>.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="dossier.label.Label.meta">
+<code class="descname">meta</code><a class="headerlink" href="#dossier.label.Label.meta" title="Permalink to this definition">¶</a></dt>
+<dd><p>Any additional meta data about this label, structured as
+a dictionary.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="dossier.label.Label.other">
-<code class="descname">other</code><span class="sig-paren">(</span><em>content_id</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.other"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.other" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns the other content id.</p>
-<p>If <code class="docutils literal"><span class="pre">content_id</span> <span class="pre">==</span> <span class="pre">self.content_id1</span></code>, then return
-<code class="docutils literal"><span class="pre">self.content_id2</span></code> (and vice versa).</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="dossier.label.Label.__lt__">
-<code class="descname">__lt__</code><span class="sig-paren">(</span><em>l1</em>, <em>l2</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.__lt__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.__lt__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Defines a total ordering for labels.</p>
-<p>The ordering is meant to be the same as the ordering used
-in the underlying database storage. Namely, the key used
-to determine ordering is: <code class="docutils literal"><span class="pre">(cid1,</span> <span class="pre">cid2,</span> <span class="pre">subid1,</span> <span class="pre">subid2,</span>
-<span class="pre">annotator_id,</span> <span class="pre">MAX_TIME</span> <span class="pre">-</span> <span class="pre">epoch_ticks)</span></code> where <code class="docutils literal"><span class="pre">cid1</span> <span class="pre">&lt;=</span> <span class="pre">cid2</span></code>
-and <code class="docutils literal"><span class="pre">subid1</span> <span class="pre">&lt;=</span> <span class="pre">subid2</span></code>.</p>
-<p>Notably, the ordering does not include the coreferent <code class="docutils literal"><span class="pre">value</span></code>
-and it complements <code class="docutils literal"><span class="pre">epoch_ticks</span></code> so that more recent
-labels appear first in ascending order.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="dossier.label.Label.__eq__">
-<code class="descname">__eq__</code><span class="sig-paren">(</span><em>l1</em>, <em>l2</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.__eq__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.__eq__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Tests equality between two labels.</p>
-<p>Equality is keyed on <code class="docutils literal"><span class="pre">annotator_id</span></code> and the unordered
-comparison between content ids and subtopic ids.</p>
-<p>This definition of equality does not include the values for
-<code class="docutils literal"><span class="pre">epoch_ticks</span></code> or <code class="docutils literal"><span class="pre">value</span></code>.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="dossier.label.Label.__hash__">
-<code class="descname">__hash__</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.__hash__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.__hash__" title="Permalink to this definition">¶</a></dt>
-<dd><p>Returns a hash of this label.</p>
-<p>The hash is made up of the content ids, subtopic ids and the
-annotator id. This hash function obeys the following law:
-for all labels <code class="docutils literal"><span class="pre">x</span></code> and <code class="docutils literal"><span class="pre">y</span></code>, <code class="docutils literal"><span class="pre">x</span> <span class="pre">==</span> <span class="pre">y</span></code> if and only if
-<code class="docutils literal"><span class="pre">hash(x)</span> <span class="pre">==</span> <span class="pre">hash(y)</span></code>.</p>
+<dt id="dossier.label.Label.__init__">
+<code class="descname">__init__</code><span class="sig-paren">(</span><em>content_id1</em>, <em>content_id2</em>, <em>annotator_id</em>, <em>value</em>, <em>subtopic_id1=None</em>, <em>subtopic_id2=None</em>, <em>epoch_ticks=None</em>, <em>rating=None</em>, <em>meta=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a new label.</p>
+<p>Parameters are assigned to their corresponding fields, with
+some normalization.  If <cite>value</cite> is an <a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">int</span></code></a>, the
+corresponding <a class="reference internal" href="#dossier.label.CorefValue" title="dossier.label.CorefValue"><code class="xref py py-class docutils literal"><span class="pre">CorefValue</span></code></a> is used instead.  If
+<cite>epoch_ticks</cite> is <code class="xref py py-const docutils literal"><span class="pre">None</span></code> then the current time is
+used.  If <cite>rating</cite> is <code class="xref py py-const docutils literal"><span class="pre">None</span></code> then it will be 1 if
+<cite>value</cite> is <code class="xref py py-attr docutils literal"><span class="pre">CorefValue.Positive</span></code> and 0 otherwise.</p>
 </dd></dl>
 
 <dl class="method">
@@ -335,11 +372,113 @@ for all labels <code class="docutils literal"><span class="pre">x</span></code> 
 <code class="descname">__contains__</code><span class="sig-paren">(</span><em>v</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.__contains__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.__contains__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Tests membership of identifiers.</p>
 <p>If <cite>v</cite> is a tuple of <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">subtopic_id)</span></code>, then the
-pair is checked for membership. Otherwise, <cite>v</cite> must be a <cite>str</cite>
-and is checked for equality to one of the content ids in this
-label.</p>
-<p>As a special case, if <code class="docutils literal"><span class="pre">v</span></code> is <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">None)</span></code>, then
-<code class="docutils literal"><span class="pre">v</span></code> is treated as if it were <code class="docutils literal"><span class="pre">content_id</span></code>.</p>
+pair is checked for membership. Otherwise, <cite>v</cite> must be a
+<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">str</span></code></a> and is checked for equality to one of the content
+ids in this label.</p>
+<p>As a special case, if <cite>v</cite> is <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">None)</span></code>, then
+<cite>v</cite> is treated as if it were <code class="docutils literal"><span class="pre">content_id</span></code>.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">l</span> <span class="o">=</span> <span class="n">Label</span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="s">&#39;c2&#39;</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s">&#39;c1&#39;</span> <span class="ow">in</span> <span class="n">l</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s">&#39;a&#39;</span> <span class="ow">in</span> <span class="n">l</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">in</span> <span class="n">l</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="s">&#39;s1&#39;</span><span class="p">)</span> <span class="ow">in</span> <span class="n">l</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ll</span> <span class="o">=</span> <span class="n">Label</span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="s">&#39;c2&#39;</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;s1&#39;</span><span class="p">,</span> <span class="s">&#39;s2&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s">&#39;c1&#39;</span> <span class="ow">in</span> <span class="n">l</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">in</span> <span class="n">l</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="s">&#39;s1&#39;</span><span class="p">)</span> <span class="ow">in</span> <span class="n">l</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.label.Label.other">
+<code class="descname">other</code><span class="sig-paren">(</span><em>content_id</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.other"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.other" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the other content id.</p>
+<p>If <code class="docutils literal"><span class="pre">content_id</span> <span class="pre">==</span> <span class="pre">self.content_id1</span></code>, then return
+<code class="docutils literal"><span class="pre">self.content_id2</span></code> (and vice versa).  Raises
+<a class="reference external" href="http://docs.python.org/library/exceptions.html#exceptions.KeyError" title="(in Python v2.7)"><code class="xref py py-exc docutils literal"><span class="pre">exceptions.KeyError</span></code></a> if <cite>content_id</cite> is neither one.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">l</span> <span class="o">=</span> <span class="n">Label</span><span class="p">(</span><span class="s">&#39;c1, &#39;</span><span class="n">c2</span><span class="s">&#39;, &#39;</span><span class="n">a</span><span class="s">&#39;, 1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span><span class="o">.</span><span class="n">other</span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">)</span>
+<span class="go">&#39;c2&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span><span class="o">.</span><span class="n">other</span><span class="p">(</span><span class="s">&#39;c2&#39;</span><span class="p">)</span>
+<span class="go">&#39;c1&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span><span class="o">.</span><span class="n">other</span><span class="p">(</span><span class="s">&#39;a&#39;</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+    <span class="o">...</span>
+<span class="gr">KeyError</span>: <span class="n">&#39;a&#39;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.label.Label.subtopic_for">
+<code class="descname">subtopic_for</code><span class="sig-paren">(</span><em>content_id</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.subtopic_for"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.subtopic_for" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the subtopic id that corresponds with a content id.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">l</span> <span class="o">=</span> <span class="n">Label</span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="s">&#39;c2&#39;</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;s1&#39;</span><span class="p">,</span> <span class="s">&#39;s2&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span><span class="o">.</span><span class="n">subtopic_for</span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">)</span>
+<span class="go">&#39;s1&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span><span class="o">.</span><span class="n">subtopic_for</span><span class="p">(</span><span class="s">&#39;c2&#39;</span><span class="p">)</span>
+<span class="go">&#39;s2&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l</span><span class="o">.</span><span class="n">subtopic_for</span><span class="p">(</span><span class="s">&#39;a&#39;</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+    <span class="o">...</span>
+<span class="gr">KeyError</span>: <span class="n">&#39;a&#39;</span>
+</pre></div>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>content_id</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; content ID to look up</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">subtopic ID for <cite>content_id</cite></td>
+</tr>
+<tr class="field-odd field"><th class="field-name" colspan="2">Raises <a class="reference external" href="http://docs.python.org/library/exceptions.html#exceptions.KeyError" title="(in Python v2.7)">exceptions.KeyError</a>:</th></tr>
+<tr class="field-odd field"><td>&nbsp;</td><td class="field-body">if <cite>content_id</cite> is neither
+content ID in this label</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.label.Label.same_subject_as">
+<code class="descname">same_subject_as</code><span class="sig-paren">(</span><em>other</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.same_subject_as"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.same_subject_as" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine if two labels are about the same thing.</p>
+<p>This predicate returns <code class="xref py py-const docutils literal"><span class="pre">True</span></code> if <cite>self</cite> and <cite>other</cite>
+have the same content IDs, subtopic IDs, and annotator ID.
+The other fields may have any value.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l1</span> <span class="o">=</span> <span class="n">Label</span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="s">&#39;c2&#39;</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">,</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Positive</span><span class="p">,</span>
+<span class="gp">... </span>           <span class="n">epoch_ticks</span><span class="o">=</span><span class="n">t</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l2</span> <span class="o">=</span> <span class="n">Label</span><span class="p">(</span><span class="s">&#39;c1&#39;</span><span class="p">,</span> <span class="s">&#39;c2&#39;</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">,</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">,</span>
+<span class="gp">... </span>           <span class="n">epoch_ticks</span><span class="o">=</span><span class="n">t</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l1</span><span class="o">.</span><span class="n">same_subject_as</span><span class="p">(</span><span class="n">l2</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">l1</span> <span class="o">==</span> <span class="n">l2</span>
+<span class="go">False</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="staticmethod">
+<dt id="dossier.label.Label.most_recent">
+<em class="property">static </em><code class="descname">most_recent</code><span class="sig-paren">(</span><em>labels</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/label/label.html#Label.most_recent"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.Label.most_recent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Filter an iterator to return the most recent for each subject.</p>
+<p><cite>labels</cite> is any iterator over <a class="reference internal" href="#dossier.label.Label" title="dossier.label.Label"><code class="xref py py-class docutils literal"><span class="pre">Label</span></code></a> objects.  It
+should be sorted with the most recent first, which is the
+natural sort order that <a class="reference external" href="http://docs.python.org/library/functions.html#sorted" title="(in Python v2.7)"><code class="xref py py-func docutils literal"><span class="pre">sorted()</span></code></a> and the
+<a class="reference internal" href="#dossier.label.LabelStore" title="dossier.label.LabelStore"><code class="xref py py-class docutils literal"><span class="pre">LabelStore</span></code></a> adapter will return.  The result of this
+is a generator of the same labels but with any that are not
+the most recent for the same subject (according to
+<a class="reference internal" href="#dossier.label.Label.same_subject_as" title="dossier.label.Label.same_subject_as"><code class="xref py py-meth docutils literal"><span class="pre">same_subject_as()</span></code></a>) filtered out.</p>
 </dd></dl>
 
 </dd></dl>
@@ -347,8 +486,8 @@ label.</p>
 <dl class="class">
 <dt id="dossier.label.CorefValue">
 <em class="property">class </em><code class="descclassname">dossier.label.</code><code class="descname">CorefValue</code><a class="reference internal" href="_modules/dossier/label/label.html#CorefValue"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.label.CorefValue" title="Permalink to this definition">¶</a></dt>
-<dd><p>An enumeration that describes the value of a coreference judgment by a
-human. The judgment is always made with respect to a pair of content
+<dd><p>A human-assigned value for a coreference judgement.</p>
+<p>The judgment is always made with respect to a pair of content
 items.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -365,8 +504,9 @@ items.</p>
 </table>
 </dd></dl>
 
-<span class="target" id="module-dossier.label.run"></span><div class="section" id="dossier-label-command-line-tool">
-<h3>3.1.1. <code class="docutils literal"><span class="pre">dossier.label</span></code> command line tool<a class="headerlink" href="#dossier-label-command-line-tool" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="module-dossier.label.run">
+<span id="dossier-label-command-line-tool"></span><h3>3.1.1. <strong class="command">dossier.label</strong> command-line tool<a class="headerlink" href="#module-dossier.label.run" title="Permalink to this headline">¶</a></h3>
+<p><strong class="command">dossier.label</strong> command-line tool.</p>
 <p><code class="docutils literal"><span class="pre">dossier.label</span></code> is a command line application for viewing the raw label
 data inside the database. Generally, this is a debugging tool for developers.</p>
 <p>Run <code class="docutils literal"><span class="pre">dossier.label</span> <span class="pre">--help</span></code> for the available commands.</p>
@@ -384,7 +524,7 @@ data inside the database. Generally, this is a debugging tool for developers.</p
   <ul>
 <li><a class="reference internal" href="#">3. <code class="docutils literal"><span class="pre">dossier.label</span></code> &#8212; store ground truth data as labels</a><ul>
 <li><a class="reference internal" href="#example">3.1. Example</a><ul>
-<li><a class="reference internal" href="#dossier-label-command-line-tool">3.1.1. <code class="docutils literal"><span class="pre">dossier.label</span></code> command line tool</a></li>
+<li><a class="reference internal" href="#module-dossier.label.run">3.1.1. <strong class="command">dossier.label</strong> command-line tool</a></li>
 </ul>
 </li>
 </ul>
@@ -436,12 +576,12 @@ data inside the database. Generally, this is a debugging tool for developers.</p
         <li class="right" >
           <a href="dossier.store.html" title="2. dossier.store — store feature collections"
              >previous</a> |</li>
-        <li><a href="index.html">dossier 0.3.0 documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">dossier 0.3.4 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
         &copy; Copyright 2014, Diffeo, Inc..
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3b2.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

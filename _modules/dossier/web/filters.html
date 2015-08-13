@@ -1,0 +1,279 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.web.filters &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.web.filters</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;dossier.web.filters provides search engine filters.</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2015 Diffeo, Inc.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">chain</span><span class="p">,</span> <span class="n">imap</span><span class="p">,</span> <span class="n">product</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">import</span> <span class="nn">nilsimsa</span>
+
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">FeatureCollection</span> <span class="k">as</span> <span class="n">FC</span><span class="p">,</span> <span class="n">StringCounter</span>
+<span class="kn">from</span> <span class="nn">dossier.web.interface</span> <span class="kn">import</span> <span class="n">Filter</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="already_labeled"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.filters.already_labeled">[docs]</a><span class="k">class</span> <span class="nc">already_labeled</span><span class="p">(</span><span class="n">Filter</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Filter results that have a label associated with them.</span>
+
+<span class="sd">    If a result has a *direct* label between it and the query, then</span>
+<span class="sd">    it will be removed from the list of results.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label_store</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">already_labeled</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span> <span class="o">=</span> <span class="n">label_store</span>
+
+    <span class="k">def</span> <span class="nf">create_predicate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">labeled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span><span class="o">.</span><span class="n">directly_connected</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">)</span>
+        <span class="n">labeled_cids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">lab</span><span class="o">.</span><span class="n">other</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">labeled</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">lambda</span> <span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">_</span><span class="p">):</span> <span class="n">cid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">labeled_cids</span>
+
+</div>
+<span class="k">class</span> <span class="nc">geotime</span><span class="p">(</span><span class="n">Filter</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Filter results for GeoCoords features within the bounding box.&#39;&#39;&#39;</span>
+    <span class="n">param_schema</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">Filter</span><span class="o">.</span><span class="n">param_schema</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span>
+        <span class="s">&#39;min_lat&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">360.0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mf">360.0</span><span class="p">},</span>
+        <span class="s">&#39;max_lat&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">360.0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mf">360.0</span><span class="p">},</span>
+        <span class="s">&#39;min_lon&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">360.0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mf">360.0</span><span class="p">},</span>
+        <span class="s">&#39;max_lon&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">360.0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mf">360.0</span><span class="p">},</span>
+        <span class="s">&#39;min_alt&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">360.0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mf">360.0</span><span class="p">},</span>
+        <span class="s">&#39;max_alt&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mf">360.0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mf">360.0</span><span class="p">},</span>
+        <span class="s">&#39;min_time&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="mi">32</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">},</span>
+        <span class="s">&#39;max_time&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="mi">32</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">},</span>
+    <span class="p">})</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">geotime_feature_name</span><span class="o">=</span><span class="n">FC</span><span class="o">.</span><span class="n">GEOCOORDS_PREFIX</span> <span class="o">+</span> <span class="s">&#39;both_co_LOC_1&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">geotime</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">geotime_feature_name</span> <span class="o">=</span> <span class="n">geotime_feature_name</span>
+
+    <span class="k">def</span> <span class="nf">create_predicate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">dim_names</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;lon&#39;</span><span class="p">,</span> <span class="s">&#39;lat&#39;</span><span class="p">,</span> <span class="s">&#39;alt&#39;</span><span class="p">,</span> <span class="s">&#39;time&#39;</span><span class="p">]</span>
+        <span class="n">min_dim</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s">&#39;min_&#39;</span> <span class="o">+</span> <span class="n">dname</span><span class="p">]</span> <span class="k">for</span> <span class="n">dname</span> <span class="ow">in</span> <span class="n">dim_names</span><span class="p">]</span>
+        <span class="n">max_dim</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s">&#39;max_&#39;</span> <span class="o">+</span> <span class="n">dname</span><span class="p">]</span> <span class="k">for</span> <span class="n">dname</span> <span class="ow">in</span> <span class="n">dim_names</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">x</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">chain</span><span class="p">(</span><span class="n">min_dim</span><span class="p">,</span> <span class="n">max_dim</span><span class="p">)):</span>
+            <span class="k">return</span> <span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span>
+
+        <span class="k">def</span> <span class="nf">in_bbox</span><span class="p">(</span><span class="n">coords</span><span class="p">):</span>
+            <span class="sd">&#39;&#39;&#39;Checks each dimension.</span>
+
+<span class="sd">            Require values when filter is active in any of the</span>
+<span class="sd">            dimensions.</span>
+<span class="sd">            &#39;&#39;&#39;</span>
+            <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">min_dim</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">coords</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">coords</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">min_dim</span><span class="p">[</span><span class="n">d</span><span class="p">]:</span>
+                        <span class="k">return</span> <span class="bp">False</span>
+                <span class="k">if</span> <span class="n">max_dim</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">coords</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">coords</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">max_dim</span><span class="p">[</span><span class="n">d</span><span class="p">]:</span>
+                        <span class="k">return</span> <span class="bp">False</span>
+            <span class="k">return</span> <span class="bp">True</span>
+
+        <span class="k">def</span> <span class="nf">pred</span><span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">)):</span>
+            <span class="n">feature</span> <span class="o">=</span> <span class="n">fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">geotime_feature_name</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="nb">any</span><span class="p">(</span><span class="n">imap</span><span class="p">(</span><span class="n">in_bbox</span><span class="p">,</span> <span class="n">coords</span><span class="p">))</span>
+                       <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">coords</span> <span class="ow">in</span> <span class="n">feature</span><span class="o">.</span><span class="n">iteritems</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="n">pred</span>
+
+
+<div class="viewcode-block" id="nilsimsa_near_duplicates"><a class="viewcode-back" href="../../../dossier.web.html#dossier.web.filters.nilsimsa_near_duplicates">[docs]</a><span class="k">class</span> <span class="nc">nilsimsa_near_duplicates</span><span class="p">(</span><span class="n">Filter</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Filter results that nilsimsa says are highly similar.</span>
+
+<span class="sd">    To perform an filtering, this requires that the FCs carry</span>
+<span class="sd">    StringCounter at `nilsimsa_feature_name` and results with</span>
+<span class="sd">    nilsimsa comparison higher than the `threshold` are filtered.</span>
+<span class="sd">    `threshold` defaults to 119, which is in the range [-128, 128] per</span>
+<span class="sd">    the definition of nilsimsa. `nilsimsa_feature_name` defaults to</span>
+<span class="sd">    &#39;nilsimsa_all&#39;.</span>
+
+<span class="sd">    A note about speed performance: the order complexity of this filter</span>
+<span class="sd">    is linear in the number of results that get through the filter.</span>
+<span class="sd">    While that is unfortunate, it is inherent to the nature of using</span>
+<span class="sd">    comparison-based locality sensitive hashing (LSH). Other LSH</span>
+<span class="sd">    techniques, such as shingle hashing with simhash tend to have less</span>
+<span class="sd">    fidelity, but can be efficiently indexed to allow O(1) lookups in a</span>
+<span class="sd">    filter like this.</span>
+
+<span class="sd">    Before refactoring this to use nilsimsa directly, this was using a</span>
+<span class="sd">    &quot;kernel&quot; function that had nilsimsa buried inside it, and it had</span>
+<span class="sd">    this kind of speed performance:</span>
+
+<span class="sd">    dossier/web/tests/test_filter_preds.py::test_near_duplicates_speed_perf  4999 filtered to 49 in 2.838213 seconds, 1761.319555 per second</span>
+
+<span class="sd">    After refactoring to use nilsimsa directly in this function, the</span>
+<span class="sd">    constant factors get better, and the order complexity is still</span>
+<span class="sd">    linear in the number of items that the filter has emitted, because</span>
+<span class="sd">    it has to remember them and scan over them. Thresholding in the</span>
+<span class="sd">    nilsimsa.compare_digests function helps considerably: four times</span>
+<span class="sd">    faster on this synthetic test data when there are many different</span>
+<span class="sd">    documents, which is the typical case:</span>
+
+<span class="sd">    Without thresholding in the nilsimsa.compare_digests:</span>
+<span class="sd">    dossier/web/tests/test_filter_preds.py::test_nilsimsa_near_duplicates_speed_perf 5049 filtered to 49 in 0.772274 seconds, 6537.834870 per second</span>
+<span class="sd">    dossier/web/tests/test_filter_preds.py::test_nilsimsa_near_duplicates_speed_perf 1049 filtered to 49 in 0.162775 seconds, 6444.477004 per second</span>
+<span class="sd">    dossier/web/tests/test_filter_preds.py::test_nilsimsa_near_duplicates_speed_perf 209 filtered to 9 in 0.009348 seconds, 22357.355097 per second</span>
+
+<span class="sd">    With thresholding in the nilsimsa.compare_digests:</span>
+<span class="sd">    dossier/web/tests/test_filter_preds.py::test_nilsimsa_near_duplicates_speed_perf 5049 filtered to 49 in 0.249705 seconds, 20219.853262 per second</span>
+<span class="sd">    dossier/web/tests/test_filter_preds.py::test_nilsimsa_near_duplicates_speed_perf 1549 filtered to 49 in 0.112724 seconds, 13741.549025 per second</span>
+<span class="sd">    dossier/web/tests/test_filter_preds.py::test_nilsimsa_near_duplicates_speed_perf 209 filtered to 9 in 0.009230 seconds, 22643.802754 per second</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span>
+                 <span class="n">nilsimsa_feature_name</span><span class="o">=</span><span class="s">&#39;nilsimsa_all&#39;</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mi">119</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span> <span class="o">=</span> <span class="n">label_store</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">store</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nilsimsa_feature_name</span> <span class="o">=</span> <span class="n">nilsimsa_feature_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;nilsimsa_feature_name=</span><span class="si">%r</span><span class="s"> and threshold=</span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span>
+                    <span class="n">nilsimsa_feature_name</span><span class="p">,</span> <span class="n">threshold</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">create_predicate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">query_fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_query_fc</span><span class="p">()</span>
+        <span class="n">sim_feature</span> <span class="o">=</span> <span class="n">get_string_counter</span><span class="p">(</span><span class="n">query_fc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nilsimsa_feature_name</span><span class="p">)</span>
+
+        <span class="n">accumulator</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">sim_feature</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">nhash</span> <span class="ow">in</span> <span class="n">sim_feature</span><span class="p">:</span>
+                <span class="n">accumulator</span><span class="p">[</span><span class="n">nhash</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span>
+
+        <span class="k">def</span> <span class="nf">accumulating_predicate</span><span class="p">((</span><span class="n">content_id</span><span class="p">,</span> <span class="n">fc</span><span class="p">)):</span>
+            <span class="n">sim_feature</span> <span class="o">=</span> <span class="n">get_string_counter</span><span class="p">(</span><span class="n">fc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nilsimsa_feature_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">sim_feature</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">True</span>
+
+            <span class="k">for</span> <span class="n">nhash</span> <span class="ow">in</span> <span class="n">sim_feature</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">nhash</span> <span class="ow">in</span> <span class="n">accumulator</span><span class="p">:</span>
+                    <span class="c"># either exact duplicate, or darn close (see</span>
+                    <span class="c"># test_nilsimsa_exact_match), so filter it and no</span>
+                    <span class="c"># need to update accumulator</span>
+                    <span class="k">return</span> <span class="bp">False</span>
+
+            <span class="k">for</span> <span class="n">hash1</span><span class="p">,</span> <span class="n">hash2</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="n">sim_feature</span><span class="p">,</span> <span class="n">accumulator</span><span class="p">):</span>
+                <span class="n">score</span> <span class="o">=</span> <span class="n">nilsimsa</span><span class="o">.</span><span class="n">compare_digests</span><span class="p">(</span><span class="n">hash1</span><span class="p">,</span> <span class="n">hash2</span><span class="p">,</span>
+                                                 <span class="n">threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
+                    <span class="c"># near duplicate, so filter and do not accumulate</span>
+                    <span class="k">return</span> <span class="bp">False</span>
+
+            <span class="k">for</span> <span class="n">nhash</span> <span class="ow">in</span> <span class="n">sim_feature</span><span class="p">:</span>
+                <span class="n">accumulator</span><span class="p">[</span><span class="n">nhash</span><span class="p">]</span> <span class="o">=</span> <span class="n">content_id</span>
+
+            <span class="c"># allow it through</span>
+            <span class="k">return</span> <span class="bp">True</span>
+
+        <span class="k">return</span> <span class="n">accumulating_predicate</span>
+
+    <span class="k">def</span> <span class="nf">get_query_fc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">)</span>
+
+</div>
+<span class="k">def</span> <span class="nf">get_string_counter</span><span class="p">(</span><span class="n">fc</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Find and return a :class:`~dossier.fc.StringCounter` at</span>
+<span class="sd">    `feature_name` or at `DISPLAY_PREFIX` + `feature_name` in the</span>
+<span class="sd">    `fc`, or return None.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">feature_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">:</span>
+        <span class="n">feature</span> <span class="o">=</span> <span class="n">fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">FC</span><span class="o">.</span><span class="n">DISPLAY_PREFIX</span> <span class="o">+</span> <span class="n">feature_name</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">feature</span> <span class="o">=</span> <span class="n">fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">feature_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">feature</span><span class="p">,</span> <span class="n">StringCounter</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">feature</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">None</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

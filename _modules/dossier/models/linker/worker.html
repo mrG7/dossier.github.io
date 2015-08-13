@@ -1,0 +1,414 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.models.linker.worker &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../../index.html" />
+    <link rel="up" title="Module code" href="../../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.models.linker.worker</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;coordinate/rejester worker function for executing query generation</span>
+<span class="sd">from a set of dossiers for use with open query.</span>
+
+<span class="sd">.. autofunction:: worker</span>
+<span class="sd">.. autofunction:: traverse_extract_fetch</span>
+<span class="sd">.. autofunction:: get_subfolder_queries</span>
+<span class="sd">.. autofunction:: extract_keyword_queries</span>
+<span class="sd">.. autofunction:: name_filter</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2015 Diffeo, Inc.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
+<span class="kn">import</span> <span class="nn">cbor</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">imap</span><span class="p">,</span> <span class="n">islice</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">StringCounter</span><span class="p">,</span> <span class="n">FeatureCollection</span>
+<span class="kn">import</span> <span class="nn">dblogger</span>
+<span class="kn">import</span> <span class="nn">kvlayer</span>
+<span class="kn">import</span> <span class="nn">rejester</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline</span> <span class="kn">import</span> <span class="n">cleanse</span>
+<span class="kn">import</span> <span class="nn">yakonfig</span>
+
+<span class="kn">from</span> <span class="nn">dossier.models.subtopic</span> <span class="kn">import</span> <span class="n">subtopics</span>
+<span class="kn">from</span> <span class="nn">dossier.models.openquery.fetcher</span> <span class="kn">import</span> <span class="n">Fetcher</span>
+<span class="kn">from</span> <span class="nn">dossier.models.folder</span> <span class="kn">import</span> <span class="n">Folders</span>
+<span class="kn">from</span> <span class="nn">dossier.models.pairwise</span> <span class="kn">import</span> <span class="n">negative_subfolder_ids</span>
+<span class="kn">from</span> <span class="nn">dossier.models</span> <span class="kn">import</span> <span class="n">etl</span>
+<span class="kn">from</span> <span class="nn">dossier.models.web.config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">.model</span> <span class="kn">import</span> <span class="n">extract</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+<div class="viewcode-block" id="worker"><a class="viewcode-back" href="../../../../dossier.models.html#dossier.models.linker.worker.worker">[docs]</a><span class="k">def</span> <span class="nf">worker</span><span class="p">(</span><span class="n">work_unit</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Expects a WorkUnit from coordinated, obtains a config, and runs</span>
+<span class="sd">    traverse_extract_fetch</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="s">&#39;config&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">work_unit</span><span class="o">.</span><span class="n">spec</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">rejester</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ProgrammerError</span><span class="p">(</span>
+            <span class="s">&#39;could not run extraction without global config&#39;</span><span class="p">)</span>
+
+    <span class="n">web_conf</span> <span class="o">=</span> <span class="n">Config</span><span class="p">()</span>
+    <span class="n">unitconf</span> <span class="o">=</span> <span class="n">work_unit</span><span class="o">.</span><span class="n">spec</span><span class="p">[</span><span class="s">&#39;config&#39;</span><span class="p">]</span>
+    <span class="c">#logger.info(unitconf)</span>
+    <span class="k">with</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">defaulted_config</span><span class="p">([</span><span class="n">rejester</span><span class="p">,</span> <span class="n">kvlayer</span><span class="p">,</span> <span class="n">dblogger</span><span class="p">,</span> <span class="n">web_conf</span><span class="p">],</span>
+                                   <span class="n">config</span><span class="o">=</span><span class="n">unitconf</span><span class="p">):</span>
+        <span class="n">traverse_extract_fetch</span><span class="p">(</span><span class="n">web_conf</span><span class="p">,</span> <span class="n">work_unit</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="traverse_extract_fetch"><a class="viewcode-back" href="../../../../dossier.models.html#dossier.models.linker.worker.traverse_extract_fetch">[docs]</a><span class="k">def</span> <span class="nf">traverse_extract_fetch</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">wukey</span><span class="p">,</span> <span class="n">stop_after_extraction</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Given a config and a</span>
+<span class="sd">    `wukey=cbor.dumps((folder_name,subfolder_name))`, traverse the</span>
+<span class="sd">    folders to generate queries, issue them to Google, fetch the</span>
+<span class="sd">    results, and ingest them.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="n">config</span><span class="o">.</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">setup_namespace</span><span class="p">({</span><span class="s">&#39;openquery&#39;</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,)})</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;openquery&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">wukey</span><span class="p">,)))</span>
+        <span class="k">if</span> <span class="n">data</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;found existing query results: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+                <span class="k">return</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">config</span><span class="o">.</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;openquery&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">wukey</span><span class="p">,))</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;failed to get data from existing table&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span> <span class="o">=</span> <span class="n">cbor</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">wukey</span><span class="p">)</span>
+    <span class="n">tfidf</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">tfidf</span>
+    <span class="n">folders</span> <span class="o">=</span> <span class="n">Folders</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">kvlclient</span><span class="p">)</span>
+    <span class="n">fetcher</span> <span class="o">=</span> <span class="n">Fetcher</span><span class="p">()</span>
+
+    <span class="c">## To disable the keyword extractor model, you can uncomment out</span>
+    <span class="c">## the next three lines (`get_subfolder_queries`) and comment out</span>
+    <span class="c">## the following two lines (`extract_keyword_queries`).</span>
+    <span class="c">#keyword_feature_keys = []</span>
+    <span class="c">#queries = get_subfolder_queries(</span>
+    <span class="c">#    config.store, config.label_store, folders, fid, sid)</span>
+
+    <span class="n">queries</span><span class="p">,</span> <span class="n">keyword_feature_keys</span><span class="p">,</span> <span class="n">has_observations</span> <span class="o">=</span> <span class="n">extract_keyword_queries</span><span class="p">(</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">label_store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Model found </span><span class="si">%d</span><span class="s"> queries: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">queries</span><span class="p">),</span> <span class="n">queries</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">stop_after_extraction</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="n">keywords</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keyword_feature_keys</span><span class="p">:</span>
+        <span class="n">ckey</span> <span class="o">=</span> <span class="n">cleanse</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf8&#39;</span><span class="p">))</span>
+        <span class="n">keywords</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ckey</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">ckey</span><span class="o">.</span><span class="n">split</span><span class="p">():</span>
+            <span class="n">keywords</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
+
+    <span class="c">#link2queries = defaultdict(set)</span>
+    <span class="n">links</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;searching google for: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">queries</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">queries</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">google</span><span class="o">.</span><span class="n">web_search_with_paging</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+            <span class="n">links</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s">&#39;link&#39;</span><span class="p">])</span>
+            <span class="c">#map(link2queries[result[&#39;link&#39;]].add, cleanse(q.decode(&#39;utf8&#39;)).split())</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;discovered </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="s">&#39;link&#39;</span><span class="p">])</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="c">#logger.info(&#39;got %d URLs from %d queries&#39;, len(link2queries), len(queries))</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;got </span><span class="si">%d</span><span class="s"> URLs from </span><span class="si">%d</span><span class="s"> queries&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">links</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">queries</span><span class="p">))</span>
+
+    <span class="c"># content_ids gets modified within the &#39;callback&#39; closure</span>
+    <span class="n">content_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c">#for link, queries in link2queries.items():</span>
+
+    <span class="k">def</span> <span class="nf">callback</span><span class="p">(</span><span class="n">si</span><span class="p">,</span> <span class="n">link</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">si</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="k">return</span>
+        <span class="n">cid_url</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">link</span><span class="p">))</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+        <span class="n">cid</span> <span class="o">=</span> <span class="n">etl</span><span class="o">.</span><span class="n">interface</span><span class="o">.</span><span class="n">mk_content_id</span><span class="p">(</span><span class="n">cid_url</span><span class="p">)</span>
+        <span class="n">content_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span>
+
+        <span class="c"># hack alert!</span>
+        <span class="c"># We currently use FCs to store subtopic text data, which</span>
+        <span class="c"># means we cannot overwrite existing FCs with reckless</span>
+        <span class="c"># abandon. So we adopt a heuristic: check if an FC already</span>
+        <span class="c"># exists, and if it does, check if it is being used to store</span>
+        <span class="c"># user data. If so, don&#39;t overwrite it and move on.</span>
+        <span class="n">fc</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">fc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;subtopic|&#39;</span><span class="p">)</span>
+                                  <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">fc</span><span class="o">.</span><span class="n">iterkeys</span><span class="p">()):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;skipping ingest for </span><span class="si">%r</span><span class="s"> (abs url: </span><span class="si">%r</span><span class="s">) because &#39;</span>
+                        <span class="s">&#39;an FC with user data already exists.&#39;</span><span class="p">,</span>
+                        <span class="n">cid</span><span class="p">,</span> <span class="n">link</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">other_features</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">u&#39;keywords&#39;</span><span class="p">:</span> <span class="n">StringCounter</span><span class="p">(</span><span class="n">keywords</span><span class="p">),</span> <span class="c">#list(queries)),</span>
+        <span class="p">}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fc</span> <span class="o">=</span> <span class="n">etl</span><span class="o">.</span><span class="n">create_fc_from_html</span><span class="p">(</span>
+                <span class="n">link</span><span class="p">,</span> <span class="n">si</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">raw</span><span class="p">,</span>
+                <span class="n">encoding</span><span class="o">=</span><span class="n">si</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">encoding</span> <span class="ow">or</span> <span class="s">&#39;utf-8&#39;</span><span class="p">,</span> <span class="n">tfidf</span><span class="o">=</span><span class="n">tfidf</span><span class="p">,</span>
+                <span class="n">other_features</span><span class="o">=</span><span class="n">other_features</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">fc</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;failed to get an FC, moving on&#39;</span><span class="p">)</span>
+                <span class="k">return</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;created FC for </span><span class="si">%r</span><span class="s"> (abs url: </span><span class="si">%r</span><span class="s">)&#39;</span><span class="p">,</span>
+                        <span class="n">cid</span><span class="p">,</span> <span class="n">link</span><span class="p">)</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">put</span><span class="p">([(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">)])</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;trapped ingest failure on </span><span class="si">%r</span><span class="s"> (abs url: </span><span class="si">%r</span><span class="s">)&#39;</span><span class="p">,</span>
+                        <span class="n">cid</span><span class="p">,</span> <span class="n">link</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;FETCHING using ASYNC&#39;</span><span class="p">)</span>
+    <span class="n">fetcher</span><span class="o">.</span><span class="n">get_async</span><span class="p">(</span><span class="n">islice</span><span class="p">(</span><span class="n">links</span><span class="p">,</span> <span class="bp">None</span><span class="p">),</span> <span class="n">callback</span><span class="p">)</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;content_ids&#39;</span><span class="p">:</span> <span class="n">content_ids</span><span class="p">})</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;saving </span><span class="si">%d</span><span class="s"> content_ids in </span><span class="si">%d</span><span class="s"> bytes on wukey </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">content_ids</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="n">wukey</span><span class="p">)</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s">&#39;openquery&#39;</span><span class="p">,</span> <span class="p">((</span><span class="n">wukey</span><span class="p">,),</span> <span class="n">data</span><span class="p">))</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;done saving for </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">wukey</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="get_subfolder_queries"><a class="viewcode-back" href="../../../../dossier.models.html#dossier.models.linker.worker.get_subfolder_queries">[docs]</a><span class="k">def</span> <span class="nf">get_subfolder_queries</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Returns [unicode].</span>
+
+<span class="sd">    This returns a list of queries that can be passed on to &quot;other&quot;</span>
+<span class="sd">    search engines. The list of queries is derived from the subfolder</span>
+<span class="sd">    identified by ``fid/sid``.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">queries</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">stype</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">subtopics</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">stype</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;text&#39;</span><span class="p">,</span> <span class="s">&#39;manual&#39;</span><span class="p">):</span>
+            <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">queries</span>
+
+</div>
+<div class="viewcode-block" id="extract_keyword_queries"><a class="viewcode-back" href="../../../../dossier.models.html#dossier.models.linker.worker.extract_keyword_queries">[docs]</a><span class="k">def</span> <span class="nf">extract_keyword_queries</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">,</span> <span class="n">include_original</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Transforms a folder structure into positive and negative examples</span>
+<span class="sd">    to feed to ``linker.model.extract``.  This transforms SortingDesk&#39;s</span>
+<span class="sd">    foldering structure into *supervision* data for the extractor.</span>
+
+<span class="sd">    This works best if folder name (``fid``) is the ``name`` of an entity</span>
+<span class="sd">    in question or, more generally, a query that a user might have</span>
+<span class="sd">    issued to a search engine.  In particular, this approach makes</span>
+<span class="sd">    sense for the annotated version of this task, which is what</span>
+<span class="sd">    SortingDesk enables.</span>
+
+<span class="sd">    This returns five queries with the original_query name:</span>
+
+<span class="sd">      0. if `include_original`, then original name; the model will</span>
+<span class="sd">         eliminate if bad but it seems like it&#39;s a mistake to omit</span>
+
+<span class="sd">      1. plus the most predictive keyword</span>
+
+<span class="sd">      2. minus the least predictive keyword</span>
+
+<span class="sd">      3. minus the most predictive keyword for the negative class</span>
+
+<span class="sd">      4. plus the least predictive keyword for the negative class</span>
+
+<span class="sd">    Additionally, if any of these words are the name, we skip to the</span>
+<span class="sd">    next keyword in the list.</span>
+
+<span class="sd">    Returns a three tuple of ([unicode], [unicode], bool) where the</span>
+<span class="sd">    first list is query strings to send to a search engine, and the</span>
+<span class="sd">    second list is feature strings to put in a StringCounter.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">keyword_feature_keys</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">query_names</span> <span class="o">=</span> <span class="n">fid</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;_&#39;</span><span class="p">)</span>
+    <span class="c">## quotes added so that google treats the name as one token</span>
+    <span class="n">name1</span> <span class="o">=</span> <span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">query_names</span><span class="p">)</span>
+    <span class="c">#keyword_feature_keys.append(name1)</span>
+    <span class="n">original_query</span> <span class="o">=</span> <span class="s">&#39;</span><span class="se">\&quot;</span><span class="s">&#39;</span> <span class="o">+</span> <span class="n">name1</span>  <span class="o">+</span> <span class="s">&#39;</span><span class="se">\&quot;</span><span class="s">&#39;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;the original query was </span><span class="si">%s</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">original_query</span><span class="p">)</span>
+
+    <span class="n">queries</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c">## 0. original name</span>
+    <span class="k">if</span> <span class="n">include_original</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;query 0: including the original: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">original_query</span><span class="p">)</span>
+        <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">original_query</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">sid</span><span class="p">:</span>
+        <span class="n">name2</span> <span class="o">=</span> <span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sid</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;_&#39;</span><span class="p">))</span>
+        <span class="n">keyword_feature_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name2</span><span class="p">)</span>
+        <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span> <span class="s">&#39;</span><span class="se">\&quot;</span><span class="s">&#39;</span> <span class="o">+</span> <span class="n">name2</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\&quot;</span><span class="s">&#39;</span> <span class="p">)</span>
+
+    <span class="c">## generate positive and negative examples by traversing folders</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">folders</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Folder traversal failed to find ids, so no &#39;</span>
+                    <span class="s">&#39;training data; giving up on model-based queries&#39;</span><span class="p">)</span>
+        <span class="c"># third return value of `False` means no observations</span>
+        <span class="k">return</span> <span class="n">queries</span><span class="p">,</span> <span class="n">keyword_feature_keys</span><span class="p">,</span> <span class="bp">False</span>
+
+    <span class="n">positive_fcs</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">store</span><span class="o">.</span><span class="n">get_many</span><span class="p">(</span><span class="n">ids</span><span class="p">))</span>
+    <span class="n">negative_ids</span> <span class="o">=</span> <span class="n">imap</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                        <span class="n">negative_subfolder_ids</span><span class="p">(</span><span class="n">label_store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">))</span>
+    <span class="n">negative_fcs</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">store</span><span class="o">.</span><span class="n">get_many</span><span class="p">(</span><span class="n">negative_ids</span><span class="p">))</span>
+
+    <span class="c">## These features were selected by manual inspection of current</span>
+    <span class="c">## FOSS NER output.</span>
+    <span class="n">pos_words</span><span class="p">,</span> <span class="n">neg_words</span> <span class="o">=</span> <span class="n">extract</span><span class="p">(</span><span class="n">positive_fcs</span><span class="p">,</span> <span class="n">negative_fcs</span><span class="p">,</span>
+                                   <span class="n">features</span><span class="o">=</span><span class="p">[</span><span class="s">&#39;GPE&#39;</span><span class="p">,</span> <span class="s">&#39;PERSON&#39;</span><span class="p">,</span> <span class="s">&#39;ORGANIZATION&#39;</span><span class="p">])</span>
+
+    <span class="c">## 1. plus the most predictive keyword</span>
+    <span class="n">query_plus_pred</span> <span class="o">=</span> <span class="n">original_query</span> <span class="o">+</span> <span class="s">&#39; &#39;</span> <span class="o">+</span> \
+                                <span class="n">name_filter</span><span class="p">(</span><span class="n">pos_words</span><span class="p">,</span> <span class="n">query_names</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;query 1: + most predictive: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">query_plus_pred</span><span class="p">)</span>
+    <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query_plus_pred</span><span class="p">)</span>
+
+    <span class="c">## 2. minus the least predictive keyword</span>
+    <span class="n">query_min_least</span> <span class="o">=</span> <span class="n">original_query</span> <span class="o">+</span> <span class="s">&#39; -&#39;</span> <span class="o">+</span> \
+                                <span class="n">name_filter</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">pos_words</span><span class="p">),</span> <span class="n">query_names</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;query 2: - least predictive: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">query_min_least</span><span class="p">)</span>
+    <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query_min_least</span><span class="p">)</span>
+
+    <span class="c">## 3. minus the most predictive keyword for the negative class</span>
+    <span class="n">query_min_most_neg</span> <span class="o">=</span> <span class="n">original_query</span> <span class="o">+</span> <span class="s">&#39; -&#39;</span> <span class="o">+</span> \
+                                <span class="n">name_filter</span><span class="p">(</span><span class="n">neg_words</span><span class="p">,</span> <span class="n">query_names</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;query 3: - most predictive for neg: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">query_min_most_neg</span><span class="p">)</span>
+    <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query_min_most_neg</span><span class="p">)</span>
+
+    <span class="c">## 4. plus the least predictive keyword for the negative class</span>
+    <span class="n">query_plus_least_neg</span> <span class="o">=</span> <span class="n">original_query</span> <span class="o">+</span> <span class="s">&#39; &#39;</span> <span class="o">+</span> \
+                                <span class="n">name_filter</span><span class="p">(</span><span class="nb">reversed</span><span class="p">(</span><span class="n">neg_words</span><span class="p">),</span> <span class="n">query_names</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;query 4: + least predictive for neg: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">query_plus_least_neg</span><span class="p">)</span>
+    <span class="n">queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query_plus_least_neg</span><span class="p">)</span>
+
+    <span class="c">## for debugging</span>
+    <span class="c"># logger.info(&#39;length %d&#39;, len(positive_fcs))</span>
+
+    <span class="c"># for fc in positive_fcs:</span>
+    <span class="c">#     logger.info(&#39;pos fc %r&#39;, fc[&#39;title&#39;])</span>
+
+
+    <span class="c"># logger.info(&#39;pos fc %r&#39;, positive_fcs[3][&#39;GPE&#39;])</span>
+
+    <span class="c"># logger.info(&#39;pos fc %r&#39;, positive_fcs[3].keys())</span>
+    <span class="c"># logger.info(&#39;pos fc %r&#39;, positive_fcs[3][&#39;PERSON&#39;])</span>
+
+    <span class="c"># logger.info(&#39;positive keywords: %r&#39;, pos_words)</span>
+    <span class="c"># logger.info(&#39;negative keywords: %r&#39;, neg_words)</span>
+
+    <span class="c"># logger.info(&#39;most positive keyword: %r&#39;, pos_words[0])</span>
+
+    <span class="k">return</span> <span class="n">queries</span><span class="p">,</span> <span class="n">keyword_feature_keys</span><span class="p">,</span> <span class="bp">True</span>
+
+</div>
+<div class="viewcode-block" id="name_filter"><a class="viewcode-back" href="../../../../dossier.models.html#dossier.models.linker.worker.name_filter">[docs]</a><span class="k">def</span> <span class="nf">name_filter</span><span class="p">(</span><span class="n">keywords</span><span class="p">,</span> <span class="n">names</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Returns the first keyword from the list, unless</span>
+<span class="sd">    that keyword is one of the names in names, in which case</span>
+<span class="sd">    it continues to the next keyword.</span>
+
+<span class="sd">    Since keywords consists of tuples, it just returns the first</span>
+<span class="sd">    element of the tuple, the keyword. It also adds double</span>
+<span class="sd">    quotes around the keywords, as is appropriate for google queries.</span>
+
+<span class="sd">    Input Arguments:</span>
+<span class="sd">    keywords -- a list of (keyword, strength) tuples</span>
+<span class="sd">    names -- a list of names to be skipped</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">name_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">key_tuple</span> <span class="ow">in</span> <span class="n">keywords</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">key_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="n">name_set</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s">&#39;</span><span class="se">\&quot;</span><span class="s">&#39;</span> <span class="o">+</span> <span class="n">key_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span><span class="s">&#39;</span><span class="se">\&quot;</span><span class="s">&#39;</span>
+
+    <span class="c">## returns empty string if we run out, which we shouldn&#39;t</span>
+    <span class="k">return</span> <span class="s">&#39;&#39;</span>
+</pre></div></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

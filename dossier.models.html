@@ -6,15 +6,15 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>4. dossier.models — Active learning &mdash; dossier 0.3.0 documentation</title>
+    <title>4. dossier.models — Active learning &mdash; dossier 0.3.4 documentation</title>
     
-    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    './',
-        VERSION:     '0.3.0',
+        VERSION:     '0.3.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,8 +23,8 @@
     <script type="text/javascript" src="_static/jquery.js"></script>
     <script type="text/javascript" src="_static/underscore.js"></script>
     <script type="text/javascript" src="_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="dossier 0.3.0 documentation" href="index.html" />
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="index.html" />
     <link rel="next" title="5. dossier.web — DossierStack web services" href="dossier.web.html" />
     <link rel="prev" title="3. dossier.label — store ground truth data as labels" href="dossier.label.html" /> 
   </head>
@@ -44,7 +44,7 @@
         <li class="right" >
           <a href="dossier.label.html" title="3. dossier.label — store ground truth data as labels"
              accesskey="P">previous</a> |</li>
-        <li><a href="index.html">dossier 0.3.0 documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">dossier 0.3.4 documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -122,30 +122,16 @@ Chrome&#8217;s local storage.</p>
 <dl class="function">
 <dt id="dossier.models.pairwise.similar">
 <code class="descclassname">dossier.models.pairwise.</code><code class="descname">similar</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/pairwise.html#similar"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.pairwise.similar" title="Permalink to this definition">¶</a></dt>
-<dd><p>An active learning search engine that returns similar results.</p>
-<p>This satisfies the <a class="reference internal" href="dossier.web.html#dossier.web.SearchEngine" title="dossier.web.SearchEngine"><code class="xref py py-class docutils literal"><span class="pre">dossier.web.SearchEngine</span></code></a> interface.</p>
-<p>In addition to the standard query inputs of <code class="docutils literal"><span class="pre">content_id</span></code>,
-<code class="docutils literal"><span class="pre">filter_pred</span></code>, and <code class="docutils literal"><span class="pre">limit</span></code>, this search engine has optional
-parameters <code class="docutils literal"><span class="pre">canopy_limit</span></code> and <code class="docutils literal"><span class="pre">label_limit</span></code> that restrict
-the number of candidates loaded for in-memory ranking and the
-number of labels used for model training, respectively.</p>
-</dd></dl>
+<dd></dd></dl>
 
 <dl class="function">
 <dt id="dossier.models.pairwise.dissimilar">
 <code class="descclassname">dossier.models.pairwise.</code><code class="descname">dissimilar</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/pairwise.html#dissimilar"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.pairwise.dissimilar" title="Permalink to this definition">¶</a></dt>
-<dd><p>An active learning search engine that returns dissimilar results.</p>
-<p>This satisfies the <a class="reference internal" href="dossier.web.html#dossier.web.SearchEngine" title="dossier.web.SearchEngine"><code class="xref py py-class docutils literal"><span class="pre">dossier.web.SearchEngine</span></code></a> interface.</p>
-<p>In addition to the standard query inputs of <code class="docutils literal"><span class="pre">content_id</span></code>,
-<code class="docutils literal"><span class="pre">filter_pred</span></code>, and <code class="docutils literal"><span class="pre">limit</span></code>, this search engine has optional
-parameters <code class="docutils literal"><span class="pre">canopy_limit</span></code> and <code class="docutils literal"><span class="pre">label_limit</span></code> that restrict
-the number of candidates loaded for in-memory ranking and the
-number of labels used for model training, respectively.</p>
-</dd></dl>
+<dd></dd></dl>
 
 <dl class="class">
 <dt id="dossier.models.pairwise.PairwiseFeatureLearner">
-<em class="property">class </em><code class="descclassname">dossier.models.pairwise.</code><code class="descname">PairwiseFeatureLearner</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em>, <em>content_id</em>, <em>canopy_limit=None</em>, <em>label_limit=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/pairwise.html#PairwiseFeatureLearner"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.pairwise.PairwiseFeatureLearner" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">dossier.models.pairwise.</code><code class="descname">PairwiseFeatureLearner</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em>, <em>content_id</em>, <em>subtopic_id=None</em>, <em>canopy_limit=None</em>, <em>label_limit=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/pairwise.html#PairwiseFeatureLearner"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.pairwise.PairwiseFeatureLearner" title="Permalink to this definition">¶</a></dt>
 <dd><p>A pairwise active learning model.</p>
 <p>This active learning model applies
 <code class="xref py py-class docutils literal"><span class="pre">LogisticRegression</span></code> on-the-fly
@@ -157,7 +143,7 @@ pairwise equivalence, which can be used for coreference resolution,
 clustering, and ranking.</p>
 <dl class="method">
 <dt id="dossier.models.PairwiseFeatureLearner.__init__">
-<code class="descname">__init__</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em>, <em>content_id</em>, <em>canopy_limit=None</em>, <em>label_limit=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/pairwise.html#PairwiseFeatureLearner.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.PairwiseFeatureLearner.__init__" title="Permalink to this definition">¶</a></dt>
+<code class="descname">__init__</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em>, <em>content_id</em>, <em>subtopic_id=None</em>, <em>canopy_limit=None</em>, <em>label_limit=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/pairwise.html#PairwiseFeatureLearner.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.PairwiseFeatureLearner.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Build a new model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -217,12 +203,9 @@ probability)</td>
 feature extraction.</p>
 <dl class="function">
 <dt id="dossier.models.features.noun_phrases">
-<code class="descclassname">dossier.models.features.</code><code class="descname">noun_phrases</code><span class="sig-paren">(</span><em>text</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/sip.html#noun_phrases"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.noun_phrases" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generate a bag of normalized stemmed noun phrases from <code class="docutils literal"><span class="pre">text</span></code>.</p>
-<p>This is built around python&#8217;s nltk library for getting Noun
-Phrases (NPs). This is all documented in the NLTK Book
-<a class="reference external" href="http://www.nltk.org/book/ch03.html">http://www.nltk.org/book/ch03.html</a> and blog posts that cite the
-book.</p>
+<code class="descclassname">dossier.models.features.</code><code class="descname">noun_phrases</code><span class="sig-paren">(</span><em>text</em>, <em>included_unnormalized=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/sip.html#noun_phrases"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.noun_phrases" title="Permalink to this definition">¶</a></dt>
+<dd><p>applies normalization to the terms found by noun_phrases_as_tokens
+and joins on &#8216;_&#8217;.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -233,14 +216,222 @@ book.</p>
 </table>
 </dd></dl>
 
+<dl class="function">
+<dt id="dossier.models.features.entity_names">
+<code class="descclassname">dossier.models.features.</code><code class="descname">entity_names</code><span class="sig-paren">(</span><em>config=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/_names.html#entity_names"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.entity_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Transform on <code class="xref py py-class docutils literal"><span class="pre">FeatureCollection</span></code> that constructs
+<cite>StringCounter</cite> features using <cite>nltk</cite>-based NER.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.features.ICQs">
+<code class="descclassname">dossier.models.features.</code><code class="descname">ICQs</code><span class="sig-paren">(</span><em>text</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/basic.html#ICQs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.ICQs" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.features.skypes">
+<code class="descclassname">dossier.models.features.</code><code class="descname">skypes</code><span class="sig-paren">(</span><em>text</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/basic.html#skypes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.skypes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns list of skype handles.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.features.host_names">
+<code class="descclassname">dossier.models.features.</code><code class="descname">host_names</code><span class="sig-paren">(</span><em>urls</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/basic.html#host_names"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.host_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a StringCounter of normalized URL and parses their hostnames</p>
+<p>N.B. this assumes that absolute URLs will begin with</p>
+<p><a class="reference external" href="http://">http://</a></p>
+<p>in order to accurately resolve the host name.
+Relative URLs will not have host names.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.features.usernames">
+<code class="descclassname">dossier.models.features.</code><code class="descname">usernames</code><span class="sig-paren">(</span><em>urls</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/extraction/usernames.html#usernames"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.usernames" title="Permalink to this definition">¶</a></dt>
+<dd><p>Take an iterable of <cite>urls</cite> of normalized URL or file paths and
+attempt to extract usernames.  Returns a list.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.features.emails">
+<code class="descclassname">dossier.models.features.</code><code class="descname">emails</code><span class="sig-paren">(</span><em>text</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/basic.html#emails"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.emails" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns list of phone numbers without punctuation.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.features.phones">
+<code class="descclassname">dossier.models.features.</code><code class="descname">phones</code><span class="sig-paren">(</span><em>text</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/basic.html#phones"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.phones" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns list of phone numbers without punctuation.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.features.image_urls">
+<code class="descclassname">dossier.models.features.</code><code class="descname">image_urls</code><span class="sig-paren">(</span><em>html</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/features/basic.html#image_urls"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.features.image_urls" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </div>
-<span class="target" id="module-dossier.models.etl"></span><div class="section" id="generate-feature-collections-with-your-data">
-<h2>4.4. Generate feature collections with your data<a class="headerlink" href="#generate-feature-collections-with-your-data" title="Permalink to this headline">¶</a></h2>
-<p>This library ships with a command line program <code class="docutils literal"><span class="pre">dossier.etl</span></code> which
-provides a rudimentary pipeline for transforming data from your database
-to feature collections managed by <a class="reference internal" href="dossier.store.html#module-dossier.store" title="dossier.store"><code class="xref py py-mod docutils literal"><span class="pre">dossier.store</span></code></a>.</p>
-<p>(Currently, <code class="docutils literal"><span class="pre">dossier.etl</span></code> is hard-coded to support a specific HBase
-database, but it will be generalized as part of future work.)</p>
+<span class="target" id="module-dossier.models.etl"></span><span class="target" id="module-dossier.models.dragnet"></span><p>Detects mention and selector correlations across documents in the
+dossiers (folders), thus generating recommendations for querying and
+highlighting.</p>
+<div class="section" id="dragnet">
+<h2>4.4. Dragnet<a class="headerlink" href="#dragnet" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="dossier.models.dragnet.make_feature">
+<code class="descclassname">dossier.models.dragnet.</code><code class="descname">make_feature</code><span class="sig-paren">(</span><em>fc</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/dragnet.html#make_feature"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.dragnet.make_feature" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds a new <cite>StringCounter</cite> from the many <cite>StringCounters</cite> in the
+input <cite>fc</cite>.  This StringCounter will define one of the targets for
+the <cite>MultinomialNB</cite> classifier.</p>
+<p>This crucial function decides the relative importance of features
+extracted by the ETL pipeline.  This is essentially a form of
+domain fitting that allows us to tune the extraction to the fields
+that are important to a domain.  However, if the NER for a domain
+is inadequate, then the primary purpose of these relative
+weightings is to remove bogus NER extractions.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.dragnet.worker">
+<code class="descclassname">dossier.models.dragnet.</code><code class="descname">worker</code><span class="sig-paren">(</span><em>work_unit</em>, <em>max_sample=1000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/dragnet.html#worker"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.dragnet.worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Expects a coordinate WorkUnit for DragNet and runs the following
+steps:</p>
+<p>1. scans all dossiers at the <em>folder</em> level and assembles feature
+vectors for each folder &#8211; see <cite>make_feature</cite></p>
+<p>2. trains a multinomial naive Bayes classifier that treats each
+<em>folder</em> as a classifier target.</p>
+<p>3. sample the corpus by scanning up to <cite>max_sample</cite> and applying
+the classifier to each item to get an approx &#8220;size&#8221; of the Folder</p>
+<p>4. Bootstrap by treating those classifier predictions as truth
+data and extract the learned features that are predictive as new
+query strings.</p>
+<p>5. Put the data in kvlayer for webservice end point to return to
+polling client &#8211; see dossier.models.routes</p>
+</dd></dl>
+
+</div>
+<span class="target" id="module-dossier.models.soft_selectors"></span><p>Algorithmically determine soft selector strings.</p>
+<div class="section" id="soft-selectors">
+<h2>4.5. Soft selectors<a class="headerlink" href="#soft-selectors" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="dossier.models.soft_selectors.find_soft_selectors">
+<code class="descclassname">dossier.models.soft_selectors.</code><code class="descname">find_soft_selectors</code><span class="sig-paren">(</span><em>ids_and_clean_visible</em>, <em>start_num_tokens='10'</em>, <em>max_num_tokens='20'</em>, <em>filter_punctuation='0'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/soft_selectors.html#find_soft_selectors"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.soft_selectors.find_soft_selectors" title="Permalink to this definition">¶</a></dt>
+<dd><p>External interface for dossier.models.soft_selectors.</p>
+<p>This at scans through <cite>num_tokens</cite> values between
+<cite>start_num_tokens</cite> and <cite>max_num_tokens</cite> and calls
+<cite>find_soft_selectors_at_n</cite> looking for results</p>
+<p>All of the params can be passed from URL parameters, in which
+case they can be strings and this function will type cast them
+appropriately.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.soft_selectors.make_ngram_corpus">
+<code class="descclassname">dossier.models.soft_selectors.</code><code class="descname">make_ngram_corpus</code><span class="sig-paren">(</span><em>corpus_clean_visibles</em>, <em>num_tokens</em>, <em>filter_punctuation</em>, <em>zoning_rules=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/soft_selectors.html#make_ngram_corpus"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.soft_selectors.make_ngram_corpus" title="Permalink to this definition">¶</a></dt>
+<dd><p>takes a list of clean_visible texts, such as from StreamItems or
+FCs, tokenizes all the texts, and constructs n-grams using
+<cite>num_tokens</cite> sized windows.</p>
+<p><code class="docutils literal"><span class="pre">corpus_clean_visibles</span></code> &#8211; list of unicode strings
+<code class="docutils literal"><span class="pre">num_tokens</span></code> &#8212; the n of the n-grams
+<code class="docutils literal"><span class="pre">filter_punctuation</span></code> &#8212; if True, punctuation is filtered</p>
+</dd></dl>
+
+</div>
+<span class="target" id="module-dossier.models.linker"></span><div class="section" id="module-dossier.models.linker.model">
+<span id="linking"></span><h2>4.6. Linking<a class="headerlink" href="#module-dossier.models.linker.model" title="Permalink to this headline">¶</a></h2>
+<p>Create a keyword searches from an entity profile.  Given a labeled
+collection of feature collections, train a classifier to identify the
+entity using such as scikit-learn Bernoulli naive Bayes:</p>
+<p><a class="reference external" href="http://scikit-learn.org/stable/modules/naive_bayes.html">http://scikit-learn.org/stable/modules/naive_bayes.html</a></p>
+<p><a class="reference external" href="http://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes">http://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes</a>
+.BernoulliNB.html#sklearn.naive_bayes.BernoulliNB</p>
+<dl class="function">
+<dt id="dossier.models.linker.model.extract">
+<code class="descclassname">dossier.models.linker.model.</code><code class="descname">extract</code><span class="sig-paren">(</span><em>positive_fcs</em>, <em>negative_fcs</em>, <em>features=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/linker/model.html#extract"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.linker.model.extract" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="docutils">
+<dt>Takes a labeled set of feature collections (positive and negative)</dt>
+<dd><p class="first">and the features wanted. And trains a Naive Bayes classifier on
+the underlying keys of the set of selected features features.
+If no features are selected, all are used.</p>
+<p class="last">Returns two list of (keywords, strength) tuples ordered by strength. The
+first are feature keys that were predictive of the positive
+label and the second are the feature keys are were predictive
+of the negative label.</p>
+</dd>
+<dt><code class="docutils literal"><span class="pre">*_fcs</span></code> is the list of feature collections, positive label and</dt>
+<dd>negative label respectively.</dd>
+<dt><code class="docutils literal"><span class="pre">features</span></code> designates which specific feature gets vectorized the</dt>
+<dd>other features are ignored.</dd>
+</dl>
+</dd></dl>
+
+<span class="target" id="module-dossier.models.linker.worker"></span><p>coordinate/rejester worker function for executing query generation
+from a set of dossiers for use with open query.</p>
+<dl class="function">
+<dt id="dossier.models.linker.worker.worker">
+<code class="descclassname">dossier.models.linker.worker.</code><code class="descname">worker</code><span class="sig-paren">(</span><em>work_unit</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/linker/worker.html#worker"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.linker.worker.worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Expects a WorkUnit from coordinated, obtains a config, and runs
+traverse_extract_fetch</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.linker.worker.traverse_extract_fetch">
+<code class="descclassname">dossier.models.linker.worker.</code><code class="descname">traverse_extract_fetch</code><span class="sig-paren">(</span><em>config</em>, <em>wukey</em>, <em>stop_after_extraction=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/linker/worker.html#traverse_extract_fetch"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.linker.worker.traverse_extract_fetch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Given a config and a
+<cite>wukey=cbor.dumps((folder_name,subfolder_name))</cite>, traverse the
+folders to generate queries, issue them to Google, fetch the
+results, and ingest them.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.linker.worker.get_subfolder_queries">
+<code class="descclassname">dossier.models.linker.worker.</code><code class="descname">get_subfolder_queries</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em>, <em>folders</em>, <em>fid</em>, <em>sid</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/linker/worker.html#get_subfolder_queries"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.linker.worker.get_subfolder_queries" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns [unicode].</p>
+<p>This returns a list of queries that can be passed on to &#8220;other&#8221;
+search engines. The list of queries is derived from the subfolder
+identified by <code class="docutils literal"><span class="pre">fid/sid</span></code>.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.linker.worker.extract_keyword_queries">
+<code class="descclassname">dossier.models.linker.worker.</code><code class="descname">extract_keyword_queries</code><span class="sig-paren">(</span><em>store</em>, <em>label_store</em>, <em>folders</em>, <em>fid</em>, <em>sid</em>, <em>include_original=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/linker/worker.html#extract_keyword_queries"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.linker.worker.extract_keyword_queries" title="Permalink to this definition">¶</a></dt>
+<dd><p>Transforms a folder structure into positive and negative examples
+to feed to <code class="docutils literal"><span class="pre">linker.model.extract</span></code>.  This transforms SortingDesk&#8217;s
+foldering structure into <em>supervision</em> data for the extractor.</p>
+<p>This works best if folder name (<code class="docutils literal"><span class="pre">fid</span></code>) is the <code class="docutils literal"><span class="pre">name</span></code> of an entity
+in question or, more generally, a query that a user might have
+issued to a search engine.  In particular, this approach makes
+sense for the annotated version of this task, which is what
+SortingDesk enables.</p>
+<p>This returns five queries with the original_query name:</p>
+<blockquote>
+<div><ol class="arabic simple" start="0">
+<li>if <cite>include_original</cite>, then original name; the model will
+eliminate if bad but it seems like it&#8217;s a mistake to omit</li>
+<li>plus the most predictive keyword</li>
+<li>minus the least predictive keyword</li>
+<li>minus the most predictive keyword for the negative class</li>
+<li>plus the least predictive keyword for the negative class</li>
+</ol>
+</div></blockquote>
+<p>Additionally, if any of these words are the name, we skip to the
+next keyword in the list.</p>
+<p>Returns a three tuple of ([unicode], [unicode], bool) where the
+first list is query strings to send to a search engine, and the
+second list is feature strings to put in a StringCounter.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.models.linker.worker.name_filter">
+<code class="descclassname">dossier.models.linker.worker.</code><code class="descname">name_filter</code><span class="sig-paren">(</span><em>keywords</em>, <em>names</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/linker/worker.html#name_filter"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.linker.worker.name_filter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the first keyword from the list, unless
+that keyword is one of the names in names, in which case
+it continues to the next keyword.</p>
+<p>Since keywords consists of tuples, it just returns the first
+element of the tuple, the keyword. It also adds double
+quotes around the keywords, as is appropriate for google queries.</p>
+<p>Input Arguments:
+keywords &#8211; a list of (keyword, strength) tuples
+names &#8211; a list of names to be skipped</p>
+</dd></dl>
+
 </div>
 </div>
 
@@ -260,7 +451,9 @@ database, but it will be generalized as part of future work.)</p>
 </li>
 <li><a class="reference internal" href="#active-learning-pairwise-search-engines">4.2. Active learning pairwise search engines</a></li>
 <li><a class="reference internal" href="#feature-extraction">4.3. Feature extraction</a></li>
-<li><a class="reference internal" href="#generate-feature-collections-with-your-data">4.4. Generate feature collections with your data</a></li>
+<li><a class="reference internal" href="#dragnet">4.4. Dragnet</a></li>
+<li><a class="reference internal" href="#soft-selectors">4.5. Soft selectors</a></li>
+<li><a class="reference internal" href="#module-dossier.models.linker.model">4.6. Linking</a></li>
 </ul>
 </li>
 </ul>
@@ -310,12 +503,12 @@ database, but it will be generalized as part of future work.)</p>
         <li class="right" >
           <a href="dossier.label.html" title="3. dossier.label — store ground truth data as labels"
              >previous</a> |</li>
-        <li><a href="index.html">dossier 0.3.0 documentation</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="index.html">dossier 0.3.4 documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
         &copy; Copyright 2014, Diffeo, Inc..
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3b2.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

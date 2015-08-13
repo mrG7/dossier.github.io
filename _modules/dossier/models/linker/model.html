@@ -1,0 +1,238 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.models.linker.model &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../../index.html" />
+    <link rel="up" title="Module code" href="../../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.models.linker.model</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;Create a keyword searches from an entity profile.  Given a labeled</span>
+<span class="sd">collection of feature collections, train a classifier to identify the</span>
+<span class="sd">entity using such as scikit-learn Bernoulli naive Bayes:</span>
+
+<span class="sd">http://scikit-learn.org/stable/modules/naive_bayes.html</span>
+
+<span class="sd">http://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes</span>
+<span class="sd">.BernoulliNB.html#sklearn.naive_bayes.BernoulliNB</span>
+
+<span class="sd">.. autofunction:: extract</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2015 Diffeo, Inc.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">datetime</span>
+
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">dblogger</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="kn">import</span> <span class="nn">yakonfig</span>
+<span class="kn">import</span> <span class="nn">streamcorpus</span>
+<span class="kn">from</span> <span class="nn">streamcorpus</span> <span class="kn">import</span> <span class="n">Chunk</span><span class="p">,</span> <span class="n">make_stream_item</span>
+<span class="kn">import</span> <span class="nn">streamcorpus_pipeline</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline.stages</span> <span class="kn">import</span> <span class="n">PipelineStages</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline._pipeline</span> <span class="kn">import</span> <span class="n">PipelineFactory</span>
+
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">FeatureCollectionChunk</span> <span class="k">as</span> <span class="n">FCChunk</span>
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">FeatureCollection</span><span class="p">,</span> <span class="n">StringCounter</span>
+
+<span class="kn">import</span> <span class="nn">operator</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Counter</span><span class="p">,</span> <span class="n">defaultdict</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">backport_collections</span> <span class="kn">import</span> <span class="n">Counter</span><span class="p">,</span> <span class="n">defaultdict</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">sklearn.feature_extraction</span> <span class="kn">import</span> <span class="n">DictVectorizer</span>
+<span class="kn">from</span> <span class="nn">sklearn.naive_bayes</span> <span class="kn">import</span> <span class="n">BernoulliNB</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="extract"><a class="viewcode-back" href="../../../../dossier.models.html#dossier.models.linker.model.extract">[docs]</a><span class="k">def</span> <span class="nf">extract</span><span class="p">(</span><span class="n">positive_fcs</span><span class="p">,</span> <span class="n">negative_fcs</span><span class="p">,</span> <span class="n">features</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Takes a labeled set of feature collections (positive and negative)</span>
+<span class="sd">       and the features wanted. And trains a Naive Bayes classifier on</span>
+<span class="sd">       the underlying keys of the set of selected features features.</span>
+<span class="sd">       If no features are selected, all are used.</span>
+
+<span class="sd">       Returns two list of (keywords, strength) tuples ordered by strength. The</span>
+<span class="sd">       first are feature keys that were predictive of the positive</span>
+<span class="sd">       label and the second are the feature keys are were predictive</span>
+<span class="sd">       of the negative label.</span>
+
+<span class="sd">    ``*_fcs`` is the list of feature collections, positive label and</span>
+<span class="sd">            negative label respectively.</span>
+
+<span class="sd">    ``features`` designates which specific feature gets vectorized the</span>
+<span class="sd">               other features are ignored.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="c"># Vector of labels</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">positive_fcs</span><span class="p">)</span> <span class="o">+</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">negative_fcs</span><span class="p">))</span>
+
+    <span class="c"># Used to convert the feature collection keys into a sklearn</span>
+    <span class="c"># compatible format</span>
+    <span class="n">v</span> <span class="o">=</span> <span class="n">DictVectorizer</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="n">D</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">fc</span> <span class="ow">in</span> <span class="p">(</span><span class="n">positive_fcs</span> <span class="o">+</span> <span class="n">negative_fcs</span><span class="p">):</span>
+        <span class="n">feat</span> <span class="o">=</span> <span class="n">StringCounter</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fc</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s">&#39;how did we get an empty fc? </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">fc</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c"># The features used to pull the keys for the classifier</span>
+            <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">features</span><span class="p">:</span>
+                <span class="n">feat</span> <span class="o">+=</span> <span class="n">fc</span><span class="p">[</span><span class="n">f</span><span class="p">]</span>
+
+        <span class="n">D</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>
+
+    <span class="c"># Convert the list of Counters into an sklearn compatible format</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">D</span><span class="p">)</span>
+
+    <span class="c"># Fit the sklearn Bernoulli Naive Bayes classifer</span>
+    <span class="n">clf</span> <span class="o">=</span> <span class="n">BernoulliNB</span><span class="p">()</span>
+    <span class="n">clf</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+
+    <span class="c"># Extract the learned features that are predictive of the positive</span>
+    <span class="c"># and negative class</span>
+    <span class="n">positive_keywords</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">clf</span><span class="o">.</span><span class="n">feature_log_prob_</span><span class="p">[</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">negative_keywords</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">clf</span><span class="o">.</span><span class="n">feature_log_prob_</span><span class="p">[</span><span class="mi">0</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">pos_words</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="n">positive_keywords</span><span class="p">)</span>
+    <span class="n">neg_words</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="n">negative_keywords</span><span class="p">)</span>
+
+    <span class="c">## make a list ordered by their weight</span>
+    <span class="n">pos_ordered</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">pos_words</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                            <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">neg_ordered</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">neg_words</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                            <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">pos_ordered</span><span class="p">,</span> <span class="n">neg_ordered</span>
+</div>
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="sd">&#39;&#39;&#39;This can be used to test this code on features collections created</span>
+<span class="sd">    by the treelab pipeline</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span>
+        <span class="n">usage</span><span class="o">=</span><span class="s">&#39;python extractor.py corpus.fc&#39;</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">__doc__</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s">&#39;corpus&#39;</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="s">&#39;path feature collection chunk that contains the corpus&#39;</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+    <span class="n">positive_fcs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+    <span class="n">negative_fcs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+
+    <span class="c"># Build a fake labeled corpus</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">fc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">FCChunk</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">corpus</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">positive_fcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fc</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">negative_fcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fc</span><span class="p">)</span>
+
+    <span class="n">keywords</span> <span class="o">=</span> <span class="n">extract</span><span class="p">(</span>
+        <span class="n">positive_fcs</span><span class="p">,</span>
+        <span class="n">negative_fcs</span><span class="p">,</span>
+        <span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;both_bow_3&#39;</span><span class="p">,</span>
+                    <span class="s">&#39;both_con_3&#39;</span><span class="p">,</span>
+                    <span class="s">&#39;both_co_LOC_3&#39;</span><span class="p">,</span>
+                    <span class="s">&#39;both_co_ORG_3&#39;</span><span class="p">]</span>
+    <span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Predictive of positive labels: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">keywords</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Predictive of positive labels: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">keywords</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

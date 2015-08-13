@@ -1,0 +1,347 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.models.dragnet &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.models.dragnet</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;Detects mention and selector correlations across documents in the</span>
+<span class="sd">dossiers (folders), thus generating recommendations for querying and</span>
+<span class="sd">highlighting.</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2015 Diffeo, Inc.</span>
+
+<span class="sd">Dragnet</span>
+<span class="sd">=======</span>
+<span class="sd">.. autofunction:: make_feature</span>
+<span class="sd">.. autofunction:: worker</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">division</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">exp</span>
+<span class="kn">import</span> <span class="nn">operator</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">islice</span>
+<span class="kn">import</span> <span class="nn">kvlayer</span>
+<span class="kn">import</span> <span class="nn">dblogger</span>
+<span class="kn">import</span> <span class="nn">rejester</span>
+<span class="kn">import</span> <span class="nn">many_stop_words</span>
+<span class="kn">import</span> <span class="nn">yakonfig</span>
+<span class="kn">import</span> <span class="nn">regex</span> <span class="kn">as</span> <span class="nn">re</span>
+
+<span class="n">stops</span> <span class="o">=</span> <span class="n">many_stop_words</span><span class="o">.</span><span class="n">get_stop_words</span><span class="p">()</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Counter</span><span class="p">,</span> <span class="n">defaultdict</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">backport_collections</span> <span class="kn">import</span> <span class="n">Counter</span><span class="p">,</span> <span class="n">defaultdict</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">sklearn.feature_extraction</span> <span class="kn">import</span> <span class="n">DictVectorizer</span>
+<span class="kn">from</span> <span class="nn">sklearn.naive_bayes</span> <span class="kn">import</span> <span class="n">MultinomialNB</span>
+
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">StringCounter</span><span class="p">,</span> <span class="n">FeatureCollection</span>
+<span class="kn">from</span> <span class="nn">dossier.models.web.config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span> <span class="nn">dossier.models.folder</span> <span class="kn">import</span> <span class="n">Folders</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="make_feature"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.dragnet.make_feature">[docs]</a><span class="k">def</span> <span class="nf">make_feature</span><span class="p">(</span><span class="n">fc</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Builds a new `StringCounter` from the many `StringCounters` in the</span>
+<span class="sd">    input `fc`.  This StringCounter will define one of the targets for</span>
+<span class="sd">    the `MultinomialNB` classifier.</span>
+
+<span class="sd">    This crucial function decides the relative importance of features</span>
+<span class="sd">    extracted by the ETL pipeline.  This is essentially a form of</span>
+<span class="sd">    domain fitting that allows us to tune the extraction to the fields</span>
+<span class="sd">    that are important to a domain.  However, if the NER for a domain</span>
+<span class="sd">    is inadequate, then the primary purpose of these relative</span>
+<span class="sd">    weightings is to remove bogus NER extractions.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">feat</span> <span class="o">=</span> <span class="n">StringCounter</span><span class="p">()</span>
+    <span class="n">rejects</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">keepers</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="c">#keepers_keys = [&#39;GPE&#39;, &#39;PERSON&#39;, &#39;ORGANIZATION&#39;, &#39;usernames&#39;]</span>
+    <span class="n">keepers_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;phone&#39;</span><span class="p">,</span> <span class="s">&#39;email&#39;</span><span class="p">]</span> <span class="c">#[&#39;usernames&#39;, &#39;phone&#39;, &#39;email&#39;, &#39;ORGANIZATION&#39;, &#39;PERSON&#39;]</span>
+    <span class="n">rejects_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;keywords&#39;</span><span class="p">,</span> <span class="s">&#39;usernames&#39;</span><span class="p">,</span> <span class="s">&#39;ORGANIZATION&#39;</span><span class="p">,</span> <span class="s">&#39;PERSON&#39;</span><span class="p">]</span>
+    <span class="c"># The features used to pull the keys for the classifier</span>
+    <span class="k">for</span> <span class="n">f</span><span class="p">,</span> <span class="n">strength</span> <span class="ow">in</span> <span class="p">[(</span><span class="s">&#39;keywords&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;GPE&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;bow&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;bowNP_sip&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">8</span><span class="p">),</span>
+                        <span class="p">(</span><span class="s">&#39;phone&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">12</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;email&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">12</span><span class="p">),</span>
+                        <span class="p">(</span><span class="s">&#39;bowNP&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">3</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;PERSON&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">8</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;ORGANIZATION&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;usernames&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="o">**</span><span class="mi">12</span><span class="p">)]:</span>
+        <span class="k">if</span> <span class="n">strength</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">feat</span> <span class="o">+=</span> <span class="n">fc</span><span class="p">[</span><span class="n">f</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">feat</span> <span class="o">+=</span> <span class="n">StringCounter</span><span class="p">({</span><span class="n">key</span><span class="p">:</span> <span class="n">strength</span> <span class="o">*</span> <span class="n">count</span>
+                                   <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">[</span><span class="n">f</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span>
+        <span class="k">if</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">rejects_keys</span><span class="p">:</span>
+            <span class="nb">map</span><span class="p">(</span><span class="n">rejects</span><span class="o">.</span><span class="n">add</span><span class="p">,</span> <span class="n">fc</span><span class="p">[</span><span class="n">f</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">keepers_keys</span><span class="p">:</span>
+            <span class="nb">map</span><span class="p">(</span><span class="n">keepers</span><span class="o">.</span><span class="n">add</span><span class="p">,</span> <span class="n">fc</span><span class="p">[</span><span class="n">f</span><span class="p">])</span>
+        <span class="k">if</span> <span class="s">u&#39;&#39;</span> <span class="ow">in</span> <span class="n">feat</span><span class="p">:</span> <span class="n">feat</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">u&#39;&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">feat</span><span class="p">,</span> <span class="n">rejects</span><span class="p">,</span> <span class="n">keepers</span>
+
+</div>
+<div class="viewcode-block" id="worker"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.dragnet.worker">[docs]</a><span class="k">def</span> <span class="nf">worker</span><span class="p">(</span><span class="n">work_unit</span><span class="p">,</span> <span class="n">max_sample</span><span class="o">=</span><span class="mi">1000</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Expects a coordinate WorkUnit for DragNet and runs the following</span>
+<span class="sd">    steps:</span>
+
+<span class="sd">    1. scans all dossiers at the *folder* level and assembles feature</span>
+<span class="sd">    vectors for each folder -- see `make_feature`</span>
+
+<span class="sd">    2. trains a multinomial naive Bayes classifier that treats each</span>
+<span class="sd">    *folder* as a classifier target.</span>
+
+<span class="sd">    3. sample the corpus by scanning up to `max_sample` and applying</span>
+<span class="sd">    the classifier to each item to get an approx &quot;size&quot; of the Folder</span>
+
+<span class="sd">    4. Bootstrap by treating those classifier predictions as truth</span>
+<span class="sd">    data and extract the learned features that are predictive as new</span>
+<span class="sd">    query strings.</span>
+
+<span class="sd">    5. Put the data in kvlayer for webservice end point to return to</span>
+<span class="sd">    polling client -- see dossier.models.routes</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="s">&#39;config&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">work_unit</span><span class="o">.</span><span class="n">spec</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">rejester</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ProgrammerError</span><span class="p">(</span>
+            <span class="s">&#39;could not run dragnet without global config&#39;</span><span class="p">)</span>
+
+    <span class="n">web_conf</span> <span class="o">=</span> <span class="n">Config</span><span class="p">()</span>
+    <span class="n">unitconf</span> <span class="o">=</span> <span class="n">work_unit</span><span class="o">.</span><span class="n">spec</span><span class="p">[</span><span class="s">&#39;config&#39;</span><span class="p">]</span>
+    <span class="k">with</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">defaulted_config</span><span class="p">([</span><span class="n">rejester</span><span class="p">,</span> <span class="n">kvlayer</span><span class="p">,</span> <span class="n">dblogger</span><span class="p">,</span> <span class="n">web_conf</span><span class="p">],</span>
+                                   <span class="n">config</span><span class="o">=</span><span class="n">unitconf</span><span class="p">):</span>
+
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">D</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
+
+        <span class="n">label2fid</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="n">rejects</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">keepers</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="c"># 1. make a classifier target for each *folder*, ignoring</span>
+        <span class="c"># subfolder structure</span>
+        <span class="n">FT</span> <span class="o">=</span> <span class="n">Folders</span><span class="p">(</span><span class="n">web_conf</span><span class="o">.</span><span class="n">kvlclient</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">fid</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">FT</span><span class="o">.</span><span class="n">folders</span><span class="p">()):</span>
+            <span class="n">label2fid</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">fid</span>
+            <span class="k">for</span> <span class="n">sid</span> <span class="ow">in</span> <span class="n">FT</span><span class="o">.</span><span class="n">subfolders</span><span class="p">(</span><span class="n">fid</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">subtopic_id</span> <span class="ow">in</span> <span class="n">FT</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">):</span>
+                    <span class="n">fc</span> <span class="o">=</span> <span class="n">web_conf</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">fc</span><span class="p">:</span>
+                        <span class="c"># NB: first call to make_feature</span>
+                        <span class="n">feat</span><span class="p">,</span> <span class="n">_rejects</span><span class="p">,</span> <span class="n">_keepers</span> <span class="o">=</span> <span class="n">make_feature</span><span class="p">(</span><span class="n">fc</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">_rejects</span> <span class="o">=</span> <span class="p">{}</span>
+                        <span class="n">_keepers</span> <span class="o">=</span> <span class="p">{}</span>
+                    <span class="n">D</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                    <span class="n">rejects</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_rejects</span><span class="p">)</span>
+                    <span class="n">keepers</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_keepers</span><span class="p">)</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;fid=</span><span class="si">%r</span><span class="s">, observation: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">cid</span><span class="p">)</span>
+
+        <span class="c"># 2. Convert the StringCounters into an sklearn format and</span>
+        <span class="c"># train MultinomialNB</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;transforming...&#39;</span><span class="p">)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">DictVectorizer</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">D</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;transform fit done.&#39;</span><span class="p">)</span>
+
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+
+        <span class="c"># Fit the sklearn Bernoulli Naive Bayes classifer</span>
+        <span class="n">clf</span> <span class="o">=</span> <span class="n">MultinomialNB</span><span class="p">()</span>
+        <span class="n">clf</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;fit MultinomialNB&#39;</span><span class="p">)</span>
+
+        <span class="c"># 3. Scan the corpus up to max_sample putting the items into</span>
+        <span class="c"># each target to get an approx &quot;size&quot; of the Folder</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">islice</span><span class="p">(</span><span class="n">web_conf</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">scan</span><span class="p">(),</span> <span class="n">max_sample</span><span class="p">):</span>
+            <span class="c"># build the same feature vector as the training process</span>
+            <span class="n">feat</span><span class="p">,</span> <span class="n">_rejects</span><span class="p">,</span> <span class="n">_keepers</span> <span class="o">=</span> <span class="n">make_feature</span><span class="p">(</span><span class="n">fc</span><span class="p">)</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">transform</span><span class="p">([</span><span class="n">feat</span><span class="p">])</span>
+            <span class="c"># predict which folder it belongs in</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="n">clf</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="mi">0</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="c"># count the effective size of that folder in this sample</span>
+            <span class="n">counts</span><span class="p">[</span><span class="n">label2fid</span><span class="p">[</span><span class="n">target</span><span class="p">]]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;counts done&#39;</span><span class="p">)</span>
+
+        <span class="c">## 4. Bootstrap by treating those classifier predictions as</span>
+        <span class="c">## truth data and extract the learned features that are</span>
+        <span class="c">## predictive as new query strings.</span>
+        <span class="n">clusters</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">labels</span><span class="p">)):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s">&#39;considering cluster: </span><span class="si">%d</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">idx</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">all_features</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">clf</span><span class="o">.</span><span class="n">feature_log_prob_</span><span class="p">[</span><span class="n">idx</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s">&#39;beyond edge on cluster </span><span class="si">%d</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">idx</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">words</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="n">all_features</span><span class="p">)</span>
+            <span class="n">ordered</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">words</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                             <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="n">filtered</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="n">ordered</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">is_bad_token</span><span class="p">(</span><span class="n">it</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span> <span class="k">continue</span>
+
+                <span class="k">if</span> <span class="n">is_username</span><span class="p">(</span><span class="n">it</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%r</span><span class="s"> is_username&#39;</span><span class="p">,</span> <span class="n">it</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="c">#else:</span>
+                <span class="c">#    continue</span>
+                <span class="n">filtered</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">it</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">100</span><span class="p">:</span> <span class="c"># hard cutoff</span>
+                    <span class="k">break</span>
+
+            <span class="c"># normalize cluster size exponentially</span>
+            <span class="n">biggest</span> <span class="o">=</span> <span class="n">exp</span><span class="p">(</span><span class="n">filtered</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+            <span class="c"># rescale all by biggest</span>
+            <span class="n">filtered</span> <span class="o">=</span> <span class="p">[(</span><span class="n">key</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">counts</span><span class="p">[</span><span class="n">label2fid</span><span class="p">[</span><span class="n">idx</span><span class="p">]]</span> <span class="o">*</span> <span class="n">exp</span><span class="p">(</span><span class="n">w</span><span class="p">)</span> <span class="o">/</span> <span class="n">biggest</span><span class="p">)))</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">filtered</span><span class="p">]</span>
+            <span class="c"># describe what we just figured out</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> --&gt; </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">label2fid</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">: </span><span class="si">%d</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">it</span> <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="n">filtered</span><span class="p">[:</span><span class="mi">10</span><span class="p">]])</span>
+
+            <span class="c"># return build the JSON-serializable format for the</span>
+            <span class="c"># DragNet UI embedded inside SortingDesk</span>
+            <span class="n">cluster</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">cluster</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s">&#39;caption&#39;</span><span class="p">:</span> <span class="n">label2fid</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                            <span class="s">&#39;weight&#39;</span><span class="p">:</span> <span class="n">counts</span><span class="p">[</span><span class="n">label2fid</span><span class="p">[</span><span class="n">idx</span><span class="p">]],</span>
+                            <span class="s">&#39;folder_id&#39;</span><span class="p">:</span> <span class="bp">None</span><span class="p">,</span>
+                            <span class="p">})</span>
+            <span class="n">cluster</span> <span class="o">+=</span> <span class="p">[{</span><span class="s">&#39;caption&#39;</span><span class="p">:</span> <span class="n">caption</span><span class="p">,</span> <span class="s">&#39;weight&#39;</span><span class="p">:</span> <span class="n">weight</span><span class="p">,</span> <span class="s">&#39;folder_id&#39;</span><span class="p">:</span> <span class="n">label2fid</span><span class="p">[</span><span class="n">idx</span><span class="p">]}</span> <span class="k">for</span> <span class="n">caption</span><span class="p">,</span> <span class="n">weight</span> <span class="ow">in</span> <span class="n">filtered</span> <span class="k">if</span> <span class="n">weight</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">clusters</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cluster</span><span class="p">)</span>
+
+        <span class="c"># 5. Put the data in kvlayer for webservice end point to</span>
+        <span class="c"># return to polling client</span>
+        <span class="n">web_conf</span><span class="o">.</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">setup_namespace</span><span class="p">({</span><span class="s">&#39;dragnet&#39;</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,)})</span>
+        <span class="n">web_conf</span><span class="o">.</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="s">&#39;dragnet&#39;</span><span class="p">,</span> <span class="p">((</span><span class="s">&#39;dragnet&#39;</span><span class="p">,),</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;clusters&#39;</span><span class="p">:</span> <span class="n">clusters</span><span class="p">})))</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span>
+
+</div>
+<span class="k">def</span> <span class="nf">is_username</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="c"># In the future, we should get username features in this</span>
+    <span class="c">#userclf = cyber_text_features.handles.classifier.Classifier(&#39;naivebayes&#39;)</span>
+    <span class="c">#is_username = userclf.classify(s)</span>
+    <span class="n">_is_username</span> <span class="o">=</span> <span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">allowed_format_re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">s</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="n">has_non_letter_re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+                   <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_only_underscore</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">_is_username</span>
+
+<span class="n">allowed_format_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">ur&#39;^\w(?:\w*(?:[.-_]\w+)?)*(?&lt;=^.{4,32})$&#39;</span><span class="p">)</span>
+<span class="n">has_non_letter_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">ur&#39;[^a-zA-Z]+&#39;</span><span class="p">)</span>
+<span class="n">has_only_underscore</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">ur&#39;^([^a-zA-Z]+_)+[a-zA-Z]*$&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">has_repeating_letter</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">s</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">s</span><span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">]:</span> <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="bp">False</span>
+<span class="n">has_number_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">ur&#39;[0-9]&#39;</span><span class="p">)</span>
+<span class="n">bad_punctuation_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">ur&#39;[&amp;=;&quot;-/]&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">is_bad_token</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span> <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">if</span> <span class="n">bad_punctuation_re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">s</span><span class="p">):</span> <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="bp">False</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">parse_args</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="p">[</span><span class="n">kvlayer</span><span class="p">,</span> <span class="n">yakonfig</span><span class="p">])</span>
+
+    <span class="n">config</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">get_global_config</span><span class="p">()</span>
+
+    <span class="k">class</span> <span class="nc">Empty</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span> <span class="k">pass</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">Empty</span><span class="p">()</span>
+    <span class="n">e</span><span class="o">.</span><span class="n">spec</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+    <span class="n">worker</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

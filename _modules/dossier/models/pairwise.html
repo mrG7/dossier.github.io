@@ -6,15 +6,15 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>dossier.models.pairwise &mdash; dossier 0.3.0 documentation</title>
+    <title>dossier.models.pairwise &mdash; dossier 0.3.4 documentation</title>
     
-    <link rel="stylesheet" href="../../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
     
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
-        VERSION:     '0.3.0',
+        VERSION:     '0.3.4',
         COLLAPSE_INDEX: false,
         FILE_SUFFIX: '.html',
         HAS_SOURCE:  true
@@ -23,8 +23,8 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="dossier 0.3.0 documentation" href="../../../index.html" />
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
     <link rel="up" title="Module code" href="../../index.html" /> 
   </head>
   <body role="document">
@@ -37,8 +37,8 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -50,7 +50,7 @@
   <h1>Source code for dossier.models.pairwise</h1><div class="highlight"><pre>
 <span class="sd">&#39;&#39;&#39;</span>
 <span class="sd">.. This software is released under an MIT/X11 open source license.</span>
-<span class="sd">   Copyright 2012-2014 Diffeo, Inc.</span>
+<span class="sd">   Copyright 2012-2015 Diffeo, Inc.</span>
 
 <span class="sd">Active learning pairwise search engines</span>
 <span class="sd">=======================================</span>
@@ -61,84 +61,122 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
 
 <span class="kn">import</span> <span class="nn">collections</span>
-<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">chain</span><span class="p">,</span> <span class="n">ifilter</span><span class="p">,</span> <span class="n">imap</span><span class="p">,</span> <span class="n">islice</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">ifilter</span><span class="p">,</span> <span class="n">imap</span><span class="p">,</span> <span class="n">islice</span>
 <span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">operator</span>
+<span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">re</span>
 
+<span class="kn">from</span> <span class="nn">scipy.spatial.distance</span> <span class="kn">import</span> <span class="n">cosine</span>
 <span class="kn">from</span> <span class="nn">sklearn.feature_extraction</span> <span class="kn">import</span> <span class="n">DictVectorizer</span>
 <span class="kn">from</span> <span class="nn">sklearn.metrics.pairwise</span> <span class="kn">import</span> <span class="n">pairwise_distances</span>
 <span class="kn">from</span> <span class="nn">sklearn.linear_model</span> <span class="kn">import</span> <span class="n">LogisticRegression</span>
 
-<span class="kn">from</span> <span class="nn">dossier.label</span> <span class="kn">import</span> <span class="n">CorefValue</span><span class="p">,</span> <span class="n">expand_labels</span>
-<span class="kn">from</span> <span class="nn">dossier.web</span> <span class="kn">import</span> <span class="n">engine_index_scan</span><span class="p">,</span> <span class="n">streaming_sample</span>
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">StringCounter</span>
+<span class="kn">from</span> <span class="nn">dossier.label</span> <span class="kn">import</span> <span class="n">CorefValue</span><span class="p">,</span> <span class="n">Label</span>
+<span class="kn">import</span> <span class="nn">dossier.web</span> <span class="kn">as</span> <span class="nn">web</span>
+<span class="kn">from</span> <span class="nn">dossier.models.folder</span> <span class="kn">import</span> <span class="n">Folders</span>
+<span class="kn">from</span> <span class="nn">dossier.models.soft_selectors</span> <span class="kn">import</span> <span class="n">find_soft_selectors</span>
 
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
 
-<span class="n">itget</span> <span class="o">=</span> <span class="n">operator</span><span class="o">.</span><span class="n">itemgetter</span>
 
+<div class="viewcode-block" id="similar"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.pairwise.similar">[docs]</a><span class="k">class</span> <span class="nc">similar</span><span class="p">(</span><span class="n">web</span><span class="o">.</span><span class="n">SearchEngine</span><span class="p">):</span>
+    <span class="n">param_schema</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">web</span><span class="o">.</span><span class="n">SearchEngine</span><span class="o">.</span><span class="n">param_schema</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span>
+        <span class="s">&#39;canopy_limit&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;int&#39;</span><span class="p">,</span> <span class="s">&#39;default&#39;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
+                         <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mi">10000</span><span class="p">},</span>
+        <span class="s">&#39;label_limit&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;int&#39;</span><span class="p">,</span> <span class="s">&#39;default&#39;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
+                        <span class="s">&#39;min&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">:</span> <span class="mi">10000</span><span class="p">},</span>
+    <span class="p">})</span>
 
-<div class="viewcode-block" id="similar"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.pairwise.similar">[docs]</a><span class="k">def</span> <span class="nf">similar</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;An active learning search engine that returns similar results.</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">similar</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">store</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span> <span class="o">=</span> <span class="n">label_store</span>
 
-<span class="sd">    This satisfies the :class:`dossier.web.SearchEngine` interface.</span>
+    <span class="k">def</span> <span class="nf">recommendations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">candidates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">candidates</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">add_facets</span><span class="p">(</span><span class="n">add_soft_selectors</span><span class="p">(</span><span class="n">candidates</span><span class="p">))</span>
 
-<span class="sd">    In addition to the standard query inputs of ``content_id``,</span>
-<span class="sd">    ``filter_pred``, and ``limit``, this search engine has optional</span>
-<span class="sd">    parameters ``canopy_limit`` and ``label_limit`` that restrict</span>
-<span class="sd">    the number of candidates loaded for in-memory ranking and the</span>
-<span class="sd">    number of labels used for model training, respectively.</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">return</span> <span class="n">create_search_engine</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">similar</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-
-</div>
-<div class="viewcode-block" id="dissimilar"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.pairwise.dissimilar">[docs]</a><span class="k">def</span> <span class="nf">dissimilar</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;An active learning search engine that returns dissimilar results.</span>
-
-<span class="sd">    This satisfies the :class:`dossier.web.SearchEngine` interface.</span>
-
-<span class="sd">    In addition to the standard query inputs of ``content_id``,</span>
-<span class="sd">    ``filter_pred``, and ``limit``, this search engine has optional</span>
-<span class="sd">    parameters ``canopy_limit`` and ``label_limit`` that restrict</span>
-<span class="sd">    the number of candidates loaded for in-memory ranking and the</span>
-<span class="sd">    number of labels used for model training, respectively.</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">return</span> <span class="n">create_search_engine</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">similar</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
-
-</div>
-<span class="k">def</span> <span class="nf">create_search_engine</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">similar</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
-    <span class="c"># N.B. `limit` caps the final results returned by the ranker.</span>
-    <span class="c"># This is distinct from `canopy_limit` and `label_limit`, where</span>
-    <span class="c"># they are used to keep resource use in check.</span>
-    <span class="k">def</span> <span class="nf">_</span><span class="p">(</span><span class="n">content_id</span><span class="p">,</span> <span class="n">filter_pred</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span>
-          <span class="n">canopy_limit</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">label_limit</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
-        <span class="sd">&#39;&#39;&#39;Creates an active learning search engine.</span>
-
-<span class="sd">        This is a helper function meant to satisfy the interface of</span>
-<span class="sd">        a search engine with a particular active learning model.</span>
-<span class="sd">        &#39;&#39;&#39;</span>
-        <span class="c"># Are these maximums good enough? No idea. ---AG</span>
-        <span class="n">canopy_limit</span> <span class="o">=</span> <span class="n">str_to_max_int</span><span class="p">(</span><span class="n">canopy_limit</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
-        <span class="n">label_limit</span> <span class="o">=</span> <span class="n">str_to_max_int</span><span class="p">(</span><span class="n">label_limit</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)</span>
-
+    <span class="k">def</span> <span class="nf">candidates</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">learner</span> <span class="o">=</span> <span class="n">PairwiseFeatureLearner</span><span class="p">(</span>
-            <span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">content_id</span><span class="p">,</span>
-            <span class="n">canopy_limit</span><span class="o">=</span><span class="n">canopy_limit</span><span class="p">,</span> <span class="n">label_limit</span><span class="o">=</span><span class="n">label_limit</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">,</span>
+            <span class="n">subtopic_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;subtopic_id&#39;</span><span class="p">),</span>
+            <span class="n">canopy_limit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s">&#39;canopy_limit&#39;</span><span class="p">],</span>
+            <span class="n">label_limit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s">&#39;label_limit&#39;</span><span class="p">])</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">candidate_probs</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
-                <span class="n">learner</span><span class="o">.</span><span class="n">probabilities</span><span class="p">(),</span> <span class="n">reverse</span><span class="o">=</span><span class="n">similar</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">itget</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">candidate_probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ranked_candidates</span><span class="p">(</span><span class="n">learner</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">InsufficientTrainingData</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Falling back to plain index scan...&#39;</span><span class="p">)</span>
-            <span class="n">index_scan</span> <span class="o">=</span> <span class="n">engine_index_scan</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">index_scan</span><span class="p">(</span><span class="n">content_id</span><span class="p">,</span> <span class="n">filter_pred</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">web</span><span class="o">.</span><span class="n">engine_index_scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span>
+                       <span class="o">.</span><span class="n">set_query_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">)</span>
+                       <span class="o">.</span><span class="n">set_query_params</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_params</span><span class="p">)</span>
+                       <span class="o">.</span><span class="n">recommendations</span><span class="p">())</span>
 
-        <span class="n">ranked</span> <span class="o">=</span> <span class="n">ifilter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">filter_pred</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">candidate_probs</span><span class="p">)</span>
-        <span class="n">results</span> <span class="o">=</span> <span class="n">imap</span><span class="p">(</span><span class="k">lambda</span> <span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">),</span> <span class="n">p</span><span class="p">):</span> <span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">,</span> <span class="p">{</span><span class="s">&#39;probability&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">}),</span>
+        <span class="n">predicate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_filter_predicate</span><span class="p">()</span>
+        <span class="n">ranked</span> <span class="o">=</span> <span class="n">ifilter</span><span class="p">(</span><span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">predicate</span><span class="p">(</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">candidate_probs</span><span class="p">)</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">imap</span><span class="p">(</span><span class="k">lambda</span> <span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">),</span> <span class="n">p</span><span class="p">):</span> <span class="n">learner</span><span class="o">.</span><span class="n">as_result</span><span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">,</span> <span class="n">p</span><span class="p">),</span>
                        <span class="n">ranked</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s">&#39;results&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">islice</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">limit</span><span class="p">)),</span>
-        <span class="p">}</span>
-    <span class="k">return</span> <span class="n">_</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;results&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">islice</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s">&#39;limit&#39;</span><span class="p">]))}</span>
+
+    <span class="k">def</span> <span class="nf">ranked_candidates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">learner</span><span class="p">):</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">probabilities</span><span class="p">(),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;results</span><span class="se">\n</span><span class="si">%s</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">map</span><span class="p">(</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">results</span><span class="p">))))</span>
+        <span class="k">return</span> <span class="n">results</span>
+
+</div>
+<div class="viewcode-block" id="dissimilar"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.pairwise.dissimilar">[docs]</a><span class="k">class</span> <span class="nc">dissimilar</span><span class="p">(</span><span class="n">similar</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">ranked_candidates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">learner</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">learner</span><span class="o">.</span><span class="n">probabilities</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+
+</div>
+<span class="k">def</span> <span class="nf">add_soft_selectors</span><span class="p">(</span><span class="n">engine_result</span><span class="p">):</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="n">engine_result</span><span class="p">[</span><span class="s">&#39;results&#39;</span><span class="p">]</span>
+    <span class="n">ids_and_clean</span><span class="p">,</span> <span class="n">fcs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+        <span class="n">ids_and_clean</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">u&#39;meta_clean_visible&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)))</span>
+        <span class="n">fcs</span><span class="p">[</span><span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">suggestions</span> <span class="o">=</span> <span class="n">find_soft_selectors</span><span class="p">(</span><span class="n">ids_and_clean</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">suggestions</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">s</span><span class="p">[</span><span class="s">&#39;hits&#39;</span><span class="p">]:</span>
+            <span class="n">hit</span><span class="p">[</span><span class="s">&#39;title&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_title</span><span class="p">(</span><span class="n">fcs</span><span class="p">[</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;content_id&#39;</span><span class="p">]],</span>
+                                     <span class="n">default</span><span class="o">=</span><span class="n">s</span><span class="p">[</span><span class="s">&#39;phrase&#39;</span><span class="p">])</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">engine_result</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="s">&#39;suggestions&#39;</span><span class="p">:</span> <span class="n">suggestions</span><span class="p">})</span>
+
+
+<span class="k">def</span> <span class="nf">add_facets</span><span class="p">(</span><span class="n">engine_result</span><span class="p">,</span> <span class="n">facet_features</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Adds facets to search results.</span>
+
+<span class="sd">    Construct a new result payload with `facets` added as a new</span>
+<span class="sd">    top-level property that carries a mapping from unicode strings to</span>
+<span class="sd">    lists of content_ids.  The `facet_features` lists the names of</span>
+<span class="sd">    :class:`~dossier.fc.StringCounter` features in each result</span>
+<span class="sd">    :class:`~dossier.fc.FeatureCollection` to harvest phrases for the</span>
+<span class="sd">    facets list.  If not specified, `facet_features` defaults to</span>
+<span class="sd">    `bowNP_sip`.</span>
+
+<span class="sd">    The remainder of the facet logic is handled in the UI.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">facet_features</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">facet_features</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;bowNP_sip&#39;</span><span class="p">]</span>
+    <span class="n">phrases</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">engine_result</span><span class="p">[</span><span class="s">&#39;results&#39;</span><span class="p">]:</span>
+        <span class="n">cid</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">fc</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">facet_features</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">phrase</span> <span class="ow">in</span> <span class="n">fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">u&#39;bowNP_sip&#39;</span><span class="p">,</span> <span class="p">[]):</span>
+                <span class="n">phrases</span><span class="p">[</span><span class="n">phrase</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cid</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">engine_result</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="s">&#39;facets&#39;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">phrases</span><span class="p">)})</span>
+
+
+<span class="k">def</span> <span class="nf">get_title</span><span class="p">(</span><span class="n">fc</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="n">title</span> <span class="o">=</span> <span class="n">fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">u&#39;title&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">title</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">&#39;&lt;title&gt;(.*?)&lt;/title&gt;&#39;</span><span class="p">,</span> <span class="n">fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">u&#39;meta_clean_html&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">m</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">title</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">title</span> <span class="ow">or</span> <span class="n">default</span>
 
 
 <span class="k">class</span> <span class="nc">InsufficientTrainingData</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
@@ -161,7 +199,7 @@
 <span class="sd">    .. automethod:: dossier.models.PairwiseFeatureLearner.__init__</span>
 <span class="sd">    .. automethod:: dossier.models.PairwiseFeatureLearner.probabilities</span>
 <span class="sd">    &#39;&#39;&#39;</span>
-<div class="viewcode-block" id="PairwiseFeatureLearner.__init__"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.pairwise.PairwiseFeatureLearner.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">content_id</span><span class="p">,</span>
+<div class="viewcode-block" id="PairwiseFeatureLearner.__init__"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.pairwise.PairwiseFeatureLearner.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">content_id</span><span class="p">,</span> <span class="n">subtopic_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
                  <span class="n">canopy_limit</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">label_limit</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Build a new model.</span>
 
@@ -182,11 +220,43 @@
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">store</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span> <span class="o">=</span> <span class="n">label_store</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">folders</span> <span class="o">=</span> <span class="n">Folders</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">kvl</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span> <span class="o">=</span> <span class="n">content_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_subtopic_id</span> <span class="o">=</span> <span class="n">subtopic_id</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span> <span class="o">=</span> <span class="bp">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">canopy_limit</span> <span class="o">=</span> <span class="n">canopy_limit</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">label_limit</span> <span class="o">=</span> <span class="n">label_limit</span>
 </div>
+    <span class="k">def</span> <span class="nf">as_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">fnames</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">fc</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+        <span class="n">intermediates</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">([(</span><span class="n">n</span><span class="p">,</span> <span class="p">{</span><span class="s">&#39;kernel&#39;</span><span class="p">:</span> <span class="s">&#39;cosine&#39;</span><span class="p">,</span>
+                             <span class="s">&#39;feature1&#39;</span><span class="p">:</span> <span class="n">n</span><span class="p">,</span>
+                             <span class="s">&#39;feature2&#39;</span><span class="p">:</span> <span class="n">n</span><span class="p">,</span>
+                             <span class="s">&#39;kernel_value&#39;</span><span class="p">:</span> <span class="bp">None</span><span class="p">,</span>
+                             <span class="s">&#39;weight&#39;</span><span class="p">:</span> <span class="bp">None</span><span class="p">,</span>
+                             <span class="s">&#39;common_feature_values&#39;</span><span class="p">:</span> <span class="p">[]})</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">fnames</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">fnames</span><span class="p">:</span>
+            <span class="n">intermediates</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s">&#39;weight&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">feature_weights</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">qfeat</span><span class="p">,</span> <span class="n">cfeat</span> <span class="ow">in</span> <span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span><span class="p">[</span><span class="n">n</span><span class="p">],</span> <span class="n">fc</span><span class="p">[</span><span class="n">n</span><span class="p">])</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">fnames</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">qfeat</span><span class="p">,</span> <span class="n">StringCounter</span><span class="p">)</span> \
+                    <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cfeat</span><span class="p">,</span> <span class="n">StringCounter</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">vals</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">qfeat</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">cfeat</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+            <span class="n">intermediates</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s">&#39;common_feature_values&#39;</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="nb">sorted</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">vals</span><span class="p">))</span>
+
+            <span class="n">all_vals</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">qfeat</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">cfeat</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_vals</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">qcounts</span> <span class="o">=</span> <span class="p">[</span><span class="n">qfeat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">all_vals</span><span class="p">]</span>
+                <span class="n">ccounts</span> <span class="o">=</span> <span class="p">[</span><span class="n">cfeat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">all_vals</span><span class="p">]</span>
+                <span class="n">sim</span> <span class="o">=</span> <span class="n">cosine</span><span class="p">(</span><span class="n">qcounts</span><span class="p">,</span> <span class="n">ccounts</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">sim</span><span class="p">):</span>
+                    <span class="n">intermediates</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s">&#39;kernel_value&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sim</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">,</span> <span class="p">{</span>
+            <span class="s">&#39;probability&#39;</span><span class="p">:</span> <span class="n">p</span><span class="p">,</span>
+            <span class="s">&#39;intermediate_model_results&#39;</span><span class="p">:</span> <span class="n">intermediates</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+        <span class="p">})</span>
+
 <div class="viewcode-block" id="PairwiseFeatureLearner.probabilities"><a class="viewcode-back" href="../../../dossier.models.html#dossier.models.pairwise.PairwiseFeatureLearner.probabilities">[docs]</a>    <span class="k">def</span> <span class="nf">probabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Trains a model and predicts recommendations.</span>
 
@@ -237,7 +307,7 @@
         <span class="n">indexed_labels</span> <span class="o">=</span> <span class="n">labels_to_indexed_coref_values</span><span class="p">(</span><span class="n">content_objs</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
 
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Training...&#39;</span><span class="p">)</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">train</span><span class="p">([</span><span class="n">fc</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">content_objs</span><span class="p">],</span> <span class="n">indexed_labels</span><span class="p">)</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">content_objs</span><span class="p">,</span> <span class="n">indexed_labels</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
                 <span class="s">&#39;Could not train model: insufficient training data. &#39;</span>
@@ -248,7 +318,7 @@
         <span class="k">return</span> <span class="nb">zip</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">classify</span><span class="p">(</span>
             <span class="n">feature_names</span><span class="p">,</span> <span class="n">classifier</span><span class="p">,</span> <span class="n">transformer</span><span class="p">,</span> <span class="n">candidates</span><span class="p">))</span>
 </div>
-    <span class="k">def</span> <span class="nf">train</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fcs</span><span class="p">,</span> <span class="n">idx_labels</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">train</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_objs</span><span class="p">,</span> <span class="n">idx_labels</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Trains and returns a model using sklearn.</span>
 
 <span class="sd">        If there are new labels to add, they can be added, returns an</span>
@@ -263,9 +333,10 @@
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="c"># We have insufficient training data when there is only one or</span>
         <span class="c"># fewer classes of labels.</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">({</span><span class="n">lab</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">idx_labels</span><span class="p">})</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="n">lab</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">idx_labels</span><span class="p">]))</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">None</span>
 
+        <span class="n">fcs</span> <span class="o">=</span> <span class="p">[</span><span class="n">fc</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">content_objs</span><span class="p">]</span>
         <span class="n">feature_names</span> <span class="o">=</span> <span class="n">vectorizable_features</span><span class="p">(</span><span class="n">fcs</span><span class="p">)</span>
         <span class="n">dis</span> <span class="o">=</span> <span class="n">dissimilarities</span><span class="p">(</span><span class="n">feature_names</span><span class="p">,</span> <span class="n">fcs</span><span class="p">)</span>
 
@@ -273,16 +344,20 @@
         <span class="k">for</span> <span class="n">coref_value</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">idx_labels</span><span class="p">:</span>
             <span class="c"># i, j are indices into the list `fcs`</span>
             <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">coref_value</span><span class="p">)</span>  <span class="c"># either -1 or 1</span>
-            <span class="n">phi_dicts</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="n">dis</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">feature_names</span><span class="p">})</span>
+            <span class="n">phi_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">([(</span><span class="n">name</span><span class="p">,</span> <span class="n">dis</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">feature_names</span><span class="p">])</span>
+            <span class="n">phi_dicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">phi_dict</span><span class="p">)</span>
 
         <span class="n">vec</span> <span class="o">=</span> <span class="n">dict_vector</span><span class="p">()</span>
         <span class="n">training_data</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">phi_dicts</span><span class="p">)</span>
 
         <span class="n">model</span> <span class="o">=</span> <span class="n">LogisticRegression</span><span class="p">(</span><span class="n">class_weight</span><span class="o">=</span><span class="s">&#39;auto&#39;</span><span class="p">,</span> <span class="n">penalty</span><span class="o">=</span><span class="s">&#39;l1&#39;</span><span class="p">)</span>
         <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">training_data</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">feature_weights</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">([(</span><span class="n">name</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">coef_</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">i</span><span class="p">])</span>
+                                     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">feature_names</span><span class="p">)])</span>
         <span class="k">return</span> <span class="n">feature_names</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">vec</span>
 
-    <span class="k">def</span> <span class="nf">classify</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feature_names</span><span class="p">,</span> <span class="n">classifier</span><span class="p">,</span> <span class="n">transformer</span><span class="p">,</span> <span class="n">candidates</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">classify</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feature_names</span><span class="p">,</span> <span class="n">classifier</span><span class="p">,</span> <span class="n">transformer</span><span class="p">,</span> <span class="n">candidates</span><span class="p">,</span>
+                 <span class="n">query_fc</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Returns ``[probability]`` in correspondence with</span>
 <span class="sd">        ``candidates``.</span>
 
@@ -297,23 +372,26 @@
 <span class="sd">        bundling ``feature_names``, ``classifier`` and ``transformer``</span>
 <span class="sd">        into one thing known as &quot;the model.&quot; ---AG</span>
 <span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">query_fc</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">query_fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span>
         <span class="n">dis</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">feature_names</span><span class="p">:</span>
             <span class="n">vec</span> <span class="o">=</span> <span class="n">dict_vector</span><span class="p">()</span>
-            <span class="n">query</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span><span class="p">[</span><span class="n">name</span><span class="p">]])</span>
-            <span class="n">cans</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">)</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">([</span><span class="n">get_feat</span><span class="p">(</span><span class="n">query_fc</span><span class="p">,</span> <span class="n">name</span><span class="p">)])</span>
+            <span class="n">cans</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">get_feat</span><span class="p">(</span><span class="n">fc</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">)</span>
             <span class="n">dis</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">pairwise_distances</span><span class="p">(</span>
                 <span class="n">cans</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s">&#39;cosine&#39;</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="c"># in correspondence with `candidates`</span>
         <span class="n">phi_dicts</span> <span class="o">=</span> <span class="n">transformer</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span>
-            <span class="p">[{</span><span class="n">name</span><span class="p">:</span> <span class="n">dis</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">feature_names</span><span class="p">}</span>
+            <span class="p">[</span><span class="nb">dict</span><span class="p">([(</span><span class="n">name</span><span class="p">,</span> <span class="n">dis</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">feature_names</span><span class="p">])</span>
              <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">candidates</span><span class="p">))])</span>
         <span class="k">return</span> <span class="n">classifier</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">phi_dicts</span><span class="p">)[:,</span><span class="mi">1</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">canopy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="n">ids</span> <span class="o">=</span> <span class="n">streaming_sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">canopy_ids</span><span class="p">(</span><span class="n">limit_hint</span><span class="o">=</span><span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">)),</span>
-                               <span class="n">limit</span><span class="p">,</span> <span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">))</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">streaming_sample</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">canopy_ids</span><span class="p">(</span><span class="n">limit_hint</span><span class="o">=</span><span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">)),</span>
+            <span class="n">limit</span><span class="p">,</span> <span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">))</span>
         <span class="c"># I don&#39;t think it ever makes sense to include the query</span>
         <span class="c"># as part of the candidate set.</span>
         <span class="k">return</span> <span class="nb">filter</span><span class="p">(</span><span class="k">lambda</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">fc</span><span class="p">):</span> <span class="n">fc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get_many</span><span class="p">(</span><span class="n">ids</span><span class="p">))</span>
@@ -325,7 +403,7 @@
         <span class="c"># the query. But I think this is a premature optimization since</span>
         <span class="c"># the filtering functions will take care of it. (This optimization</span>
         <span class="c"># would mean fewer kernel computations.)</span>
-        <span class="n">blacklist</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">}</span>
+        <span class="n">blacklist</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">])</span>
         <span class="n">cids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
         <span class="c"># OK, so it turns out that a naive index scan is pretty inflexible and</span>
@@ -342,14 +420,17 @@
         <span class="c"># An index is removed from `progress` when it no longer produces</span>
         <span class="c"># results.</span>
         <span class="k">for</span> <span class="n">idx_name</span> <span class="ow">in</span> <span class="n">index_names</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="p">{}):</span>
-                <span class="n">progress</span><span class="p">[(</span><span class="n">idx_name</span><span class="p">,</span> <span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">feat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">idx_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">feat</span><span class="p">,</span> <span class="n">StringCounter</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">feat</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">progress</span><span class="p">[(</span><span class="n">idx_name</span><span class="p">,</span> <span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">0</span>
 
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;starting index scan (query content id: </span><span class="si">%s</span><span class="s">)&#39;</span><span class="p">,</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">)</span>
         <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">progress</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">idx_name</span> <span class="ow">in</span> <span class="n">index_names</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="p">{}):</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="p">[]):</span>
                     <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">progress</span><span class="p">:</span>
                         <span class="k">continue</span>
@@ -371,43 +452,84 @@
 
     <span class="k">def</span> <span class="nf">labels_from_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;ContentId -&gt; [Label]&#39;&#39;&#39;</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Getting connected component&#39;</span><span class="p">)</span>
-        <span class="n">pos_component</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span><span class="o">.</span><span class="n">connected_component</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">)</span>
-        <span class="n">pos_component</span> <span class="o">=</span> <span class="n">streaming_sample</span><span class="p">(</span>
-            <span class="n">pos_component</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">))</span>
-        <span class="n">pos_expanded</span> <span class="o">=</span> <span class="n">expand_labels</span><span class="p">(</span><span class="n">pos_component</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Getting negative labels&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">infer_subtopic_labels</span><span class="p">(</span><span class="n">limit</span><span class="o">=</span><span class="n">limit</span><span class="p">)</span>
 
-        <span class="c"># It turns out that inferring negative labels actually takes quite</span>
-        <span class="c"># a bit of time. I think this is because we are being a bit overeager</span>
-        <span class="c"># in how we&#39;re adding negative labels in the first place.</span>
-        <span class="c"># We should revisit this when negative labels are applied more</span>
-        <span class="c"># judiciously.</span>
-        <span class="c"># negatives = self.label_store.negative_inference(</span>
-            <span class="c"># self.query_content_id)</span>
-        <span class="n">negatives</span> <span class="o">=</span> <span class="n">ifilter</span><span class="p">(</span>
-            <span class="k">lambda</span> <span class="n">l</span><span class="p">:</span> <span class="n">l</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span><span class="o">.</span><span class="n">directly_connected</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">))</span>
+    <span class="k">def</span> <span class="nf">infer_subtopic_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="c"># The basic idea here is to aggressively gather truth data while</span>
+        <span class="c"># avoiding cross contamination with other subfolders. Since our query</span>
+        <span class="c"># is a (content_id, subtopic_id), we can use subtopic connected</span>
+        <span class="c"># components to achieve this.</span>
 
-        <span class="c"># This tomfoolery makes sure that if there are positive and</span>
-        <span class="c"># negative labels, then we&#39;ll grab at least one of each.</span>
-        <span class="c"># (It doesn&#39;t matter if we return a little more than `limit` labels.)</span>
-        <span class="n">pos_sample</span> <span class="o">=</span> <span class="n">streaming_sample</span><span class="p">(</span>
-            <span class="n">chain</span><span class="p">(</span><span class="n">pos_component</span><span class="p">,</span> <span class="n">pos_expanded</span><span class="p">),</span>
-            <span class="n">limit</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">))</span>
-        <span class="n">neg_sample</span> <span class="o">=</span> <span class="n">streaming_sample</span><span class="p">(</span>
-            <span class="n">negatives</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">))</span>
+        <span class="c"># Short aliases.</span>
+        <span class="n">cid</span><span class="p">,</span> <span class="n">subid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_subtopic_id</span>
+
+        <span class="c"># For positive labels, the only thing we can do is traverse the</span>
+        <span class="c"># subtopic connected component.</span>
+        <span class="c"># Don&#39;t impose a hard limit on positive labels. (There are probably</span>
+        <span class="c"># very few of them.)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Inferring positive labels for: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">))</span>
+        <span class="n">pos_labels</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">label_store</span><span class="o">.</span><span class="n">expand</span><span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">))</span>
+                      <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">positive_subtopic_labels</span><span class="p">()))</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Inferring negative labels for: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">))</span>
+        <span class="n">neg_labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">negative_subtopic_labels</span><span class="p">()</span>
+
+        <span class="n">pos_sample</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">streaming_sample</span><span class="p">(</span>
+            <span class="n">pos_labels</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">))</span>
+        <span class="n">neg_sample</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">streaming_sample</span><span class="p">(</span>
+            <span class="n">neg_labels</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="n">hard_limit</span><span class="p">(</span><span class="n">limit</span><span class="p">))</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&#39;-&#39;</span> <span class="o">*</span> <span class="mi">79</span><span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&#39;POSITIVES</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">repr</span><span class="p">,</span> <span class="n">pos_sample</span><span class="p">)),</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&#39;-&#39;</span> <span class="o">*</span> <span class="mi">79</span><span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&#39;NEGATIVES</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">,</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">repr</span><span class="p">,</span> <span class="n">neg_sample</span><span class="p">)))</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&#39;-&#39;</span> <span class="o">*</span> <span class="mi">79</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">pos_sample</span> <span class="o">+</span> <span class="n">neg_sample</span>
+
+    <span class="k">def</span> <span class="nf">positive_subtopic_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cid</span><span class="p">,</span> <span class="n">subid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_subtopic_id</span>
+        <span class="n">subfolders</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">folders</span><span class="o">.</span><span class="n">parent_subfolders</span><span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">)))</span>
+
+        <span class="k">for</span> <span class="n">fid</span><span class="p">,</span> <span class="n">subfolder_id</span> <span class="ow">in</span> <span class="n">subfolders</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">folders</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">subfolder_id</span><span class="p">):</span>
+                <span class="c"># Since this item is in the same folder as our query, we</span>
+                <span class="c"># consider it a positive example. But there&#39;s no explicit</span>
+                <span class="c"># label for it, so manufacture one.</span>
+                <span class="c">#</span>
+                <span class="c"># TODO: Fix annotator id here. (We need to push annotator</span>
+                <span class="c"># information down into the search engine; the rest is</span>
+                <span class="c"># trivial.) ---AG</span>
+                <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span>
+                            <span class="n">Folders</span><span class="o">.</span><span class="n">DEFAULT_ANNOTATOR_ID</span><span class="p">,</span>
+                            <span class="n">CorefValue</span><span class="o">.</span><span class="n">Positive</span><span class="p">,</span>
+                            <span class="n">subid</span><span class="p">,</span> <span class="n">subid2</span><span class="p">)</span>
+
+                <span class="c"># Sometimes the user will directly attach a positive label</span>
+                <span class="c"># to an item in the folder. This will grab those.</span>
+                <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span><span class="o">.</span><span class="n">directly_connected</span><span class="p">(</span><span class="n">cid2</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">lab</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Positive</span> \
+                            <span class="ow">and</span> <span class="n">lab</span><span class="o">.</span><span class="n">subtopic_for</span><span class="p">(</span><span class="n">cid2</span><span class="p">)</span> <span class="o">==</span> <span class="n">subid2</span><span class="p">:</span>
+                        <span class="k">yield</span> <span class="n">lab</span>
+
+    <span class="k">def</span> <span class="nf">negative_subtopic_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">cid</span><span class="p">,</span> <span class="n">subid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_content_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_subtopic_id</span>
+        <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">negative_subtopic_labels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">label_store</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">folders</span><span class="p">,</span>
+                                            <span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="n">lab</span>
 
     <span class="k">def</span> <span class="nf">content_objs_from_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">labels</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;[Label] -&gt; [(content_id, FeatureCollection)]&#39;&#39;&#39;</span>
+        <span class="n">is_mapping</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">obj</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">Mapping</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">is_valid_fc</span><span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">fc</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">False</span>
+            <span class="k">if</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">fc</span> <span class="k">if</span> <span class="n">is_mapping</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">name</span><span class="p">]))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">False</span>
+            <span class="k">return</span> <span class="bp">True</span>
+
         <span class="n">ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
             <span class="n">ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">lab</span><span class="o">.</span><span class="n">content_id1</span><span class="p">)</span>
             <span class="n">ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">lab</span><span class="o">.</span><span class="n">content_id2</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">ifilter</span><span class="p">(</span><span class="k">lambda</span> <span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">):</span> <span class="n">fc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">,</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get_many</span><span class="p">(</span><span class="n">ids</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">ifilter</span><span class="p">(</span><span class="n">is_valid_fc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get_many</span><span class="p">(</span><span class="n">ids</span><span class="p">)))</span>
 
 </div>
 <span class="k">def</span> <span class="nf">labels_to_indexed_coref_values</span><span class="p">(</span><span class="n">content_objs</span><span class="p">,</span> <span class="n">labels</span><span class="p">):</span>
@@ -435,7 +557,7 @@
 <span class="sd">    :class:`collections.Mapping`).</span>
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">is_mapping</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">obj</span><span class="p">:</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">Mapping</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">sorted</span><span class="p">({</span><span class="n">name</span> <span class="k">for</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">fcs</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">fc</span> <span class="k">if</span> <span class="n">is_mapping</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">name</span><span class="p">])})</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="n">name</span> <span class="k">for</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">fcs</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">fc</span> <span class="k">if</span> <span class="n">is_mapping</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">name</span><span class="p">])]))</span>
 
 
 <span class="k">def</span> <span class="nf">dissimilarities</span><span class="p">(</span><span class="n">feature_names</span><span class="p">,</span> <span class="n">fcs</span><span class="p">):</span>
@@ -453,13 +575,13 @@
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;computing pairwise dissimilarity matrix &#39;</span>
                     <span class="s">&#39;for </span><span class="si">%d</span><span class="s"> of </span><span class="si">%d</span><span class="s"> features (current feature: </span><span class="si">%s</span><span class="s">)&#39;</span><span class="p">,</span>
                     <span class="n">count</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">feature_names</span><span class="p">),</span> <span class="n">name</span><span class="p">)</span>
-        <span class="c">## opportunity to use joblib is buried down inside call to</span>
-        <span class="c">## pairwise_distances...</span>
+        <span class="c"># opportunity to use joblib is buried down inside call to</span>
+        <span class="c"># pairwise_distances...</span>
         <span class="c"># And it&#39;s fixed to `n_jobs=1` because running multiprocessing</span>
         <span class="c"># inside py.test causes weird problems. It also doesn&#39;t seem like a</span>
         <span class="c"># good idea to do it inside a web server either. ---AG</span>
         <span class="n">dis</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">pairwise_distances</span><span class="p">(</span>
-            <span class="n">dict_vector</span><span class="p">()</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">fcs</span><span class="p">),</span>
+            <span class="n">dict_vector</span><span class="p">()</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">([</span><span class="n">get_feat</span><span class="p">(</span><span class="n">fc</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">fcs</span><span class="p">]),</span>
             <span class="n">metric</span><span class="o">=</span><span class="s">&#39;cosine&#39;</span><span class="p">,</span> <span class="n">n_jobs</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">dis</span>
 
@@ -472,11 +594,101 @@
     <span class="k">return</span> <span class="n">limit</span> <span class="k">if</span> <span class="n">limit</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="p">(</span><span class="n">limit</span> <span class="o">*</span> <span class="mi">10</span><span class="p">)</span>
 
 
+<span class="k">def</span> <span class="nf">get_feat</span><span class="p">(</span><span class="n">fc</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">StringCounter</span><span class="p">({</span><span class="s">&#39;&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fc</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+
 <span class="k">def</span> <span class="nf">str_to_max_int</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">maximum</span><span class="p">):</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">maximum</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
     <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">maximum</span>
+
+
+<span class="k">def</span> <span class="nf">negative_subtopic_labels</span><span class="p">(</span><span class="n">label_store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">):</span>
+    <span class="n">subfolders</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">folders</span><span class="o">.</span><span class="n">parent_subfolders</span><span class="p">((</span><span class="n">cid</span><span class="p">,</span> <span class="n">subid</span><span class="p">)))</span>
+
+    <span class="c"># Find any directly connected negative labels to any item in the</span>
+    <span class="c"># containing subfolder.</span>
+    <span class="k">for</span> <span class="n">fid</span><span class="p">,</span> <span class="n">subfolder_id</span> <span class="ow">in</span> <span class="n">subfolders</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">subfolder_id</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">lab</span> <span class="ow">in</span> <span class="n">label_store</span><span class="o">.</span><span class="n">directly_connected</span><span class="p">(</span><span class="n">cid2</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">lab</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span> \
+                        <span class="ow">and</span> <span class="n">lab</span><span class="o">.</span><span class="n">subtopic_for</span><span class="p">(</span><span class="n">cid2</span><span class="p">)</span> <span class="o">==</span> <span class="n">subid2</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">lab</span>
+
+    <span class="c"># Find all items in subfolders other than the subfolder that contains</span>
+    <span class="c"># (cid, subid) and add negative labels. Stay inside the folder (topic)</span>
+    <span class="c"># for now though.</span>
+    <span class="c">#</span>
+    <span class="c"># It&#39;s possible that `(cid, subid)` are in more than one subfolder,</span>
+    <span class="c"># but in SortingDesk, `subid` is usually some kind of offset or hash,</span>
+    <span class="c"># so it&#39;s probably very unlikely. In any case, if it is in more than</span>
+    <span class="c"># one subfolder, then it&#39;s a user error and we just have to hope that</span>
+    <span class="c"># the model figures it out.</span>
+    <span class="n">in_fids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">fid</span><span class="p">,</span> <span class="n">subfolder_id</span> <span class="ow">in</span> <span class="n">subfolders</span><span class="p">:</span>
+        <span class="n">in_fids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">fid</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">cousin_subid</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">subfolders</span><span class="p">(</span><span class="n">fid</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">cousin_subid</span> <span class="o">==</span> <span class="n">subfolder_id</span><span class="p">:</span>
+                <span class="c"># You can&#39;t be a cousin to yourself!</span>
+                <span class="k">continue</span>
+            <span class="k">for</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">cousin_subid</span><span class="p">):</span>
+                <span class="c"># TODO: Fix annotator id here. (We need to push annotator</span>
+                <span class="c"># information down into the search engine; the rest is</span>
+                <span class="c"># trivial.) ---AG</span>
+                <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span>
+                            <span class="n">Folders</span><span class="o">.</span><span class="n">DEFAULT_ANNOTATOR_ID</span><span class="p">,</span>
+                            <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">,</span>
+                            <span class="n">subid</span><span class="p">,</span> <span class="n">subid2</span><span class="p">)</span>
+
+    <span class="c"># If we exhaust the above, then let&#39;s start adding negative labels with</span>
+    <span class="c"># other topics.</span>
+    <span class="k">for</span> <span class="n">other_fid</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">folders</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">other_fid</span> <span class="ow">in</span> <span class="n">in_fids</span><span class="p">:</span>
+            <span class="c"># The item was found in one of these folders above, so ignore</span>
+            <span class="c"># it here.</span>
+            <span class="k">continue</span>
+        <span class="c"># We&#39;re home free. Find every item in this folder and make a</span>
+        <span class="c"># negative label for each.</span>
+        <span class="k">for</span> <span class="n">other_subid</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">subfolders</span><span class="p">(</span><span class="n">other_fid</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">other_fid</span><span class="p">,</span> <span class="n">other_subid</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">Label</span><span class="p">(</span><span class="n">cid</span><span class="p">,</span> <span class="n">cid2</span><span class="p">,</span>
+                            <span class="n">Folders</span><span class="o">.</span><span class="n">DEFAULT_ANNOTATOR_ID</span><span class="p">,</span>
+                            <span class="n">CorefValue</span><span class="o">.</span><span class="n">Negative</span><span class="p">,</span>
+                            <span class="n">subid</span><span class="p">,</span> <span class="n">subid2</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">negative_subfolder_ids</span><span class="p">(</span><span class="n">label_store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">subid</span><span class="p">):</span>
+    <span class="c"># Find all items in subfolders other than the subfolder that contains</span>
+    <span class="c"># (cid, subid) and add negative labels. Stay inside the folder (topic)</span>
+    <span class="c"># for now though.</span>
+    <span class="c">#</span>
+    <span class="c"># It&#39;s possible that `(cid, subid)` are in more than one subfolder,</span>
+    <span class="c"># but in SortingDesk, `subid` is usually some kind of offset or hash,</span>
+    <span class="c"># so it&#39;s probably very unlikely. In any case, if it is in more than</span>
+    <span class="c"># one subfolder, then it&#39;s a user error and we just have to hope that</span>
+    <span class="c"># the model figures it out.</span>
+    <span class="k">for</span> <span class="n">cousin_subid</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">subfolders</span><span class="p">(</span><span class="n">fid</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">cousin_subid</span> <span class="o">==</span> <span class="n">subid</span><span class="p">:</span>
+            <span class="c"># You can&#39;t be a cousin to yourself!</span>
+            <span class="k">continue</span>
+        <span class="k">for</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">cousin_subid</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span>
+
+    <span class="c"># If we exhaust the above, then let&#39;s start adding negative labels with</span>
+    <span class="c"># other topics.</span>
+    <span class="k">for</span> <span class="n">other_fid</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">folders</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">other_fid</span> <span class="o">==</span> <span class="n">fid</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="c"># We&#39;re home free. Find every item in this folder and make a</span>
+        <span class="c"># negative label for each.</span>
+        <span class="k">for</span> <span class="n">other_subid</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">subfolders</span><span class="p">(</span><span class="n">other_fid</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="n">other_fid</span><span class="p">,</span> <span class="n">other_subid</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">cid2</span><span class="p">,</span> <span class="n">subid2</span>
 </pre></div>
 
           </div>
@@ -510,13 +722,13 @@
         <li class="right" >
           <a href="../../../py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">dossier 0.3.0 documentation</a> &raquo;</li>
-          <li><a href="../../index.html" >Module code</a> &raquo;</li> 
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">
         &copy; Copyright 2014, Diffeo, Inc..
-      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3b2.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>
