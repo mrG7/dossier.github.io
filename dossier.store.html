@@ -56,11 +56,392 @@
   <div class="section" id="module-dossier.store">
 <span id="dossier-store-store-feature-collections"></span><h1>2. <a class="reference internal" href="#module-dossier.store" title="dossier.store"><code class="xref py py-mod docutils literal"><span class="pre">dossier.store</span></code></a> &#8212; store feature collections<a class="headerlink" href="#module-dossier.store" title="Permalink to this headline">¶</a></h1>
 <p>A simple storage interface for feature collections.</p>
-<p>mod:<cite>dossier.store</cite> provides a convenient interface to a mod:<cite>kvlayer</cite>
-table for storing <a class="reference internal" href="dossier.fc.html#dossier.fc.FeatureCollection" title="dossier.fc.FeatureCollection"><code class="xref py py-class docutils literal"><span class="pre">dossier.fc.FeatureCollection</span></code></a>. The
-interface consists of methods to query, search, add and remove feature
-collections from the store. It also provides functions for defining and
-searching indexes.</p>
+<p>Compatible interfaces on both ElasticSearch and <code class="xref py py-mod docutils literal"><span class="pre">kvlayer</span></code>
+are provided.</p>
+<div class="section" id="elasticsearch-based-storage">
+<h2>2.1. ElasticSearch based storage<a class="headerlink" href="#elasticsearch-based-storage" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference internal" href="#module-dossier.store" title="dossier.store"><code class="xref py py-mod docutils literal"><span class="pre">dossier.store</span></code></a> provides an interface to storing feature
+collections in ElasticSearch.</p>
+<dl class="class">
+<dt id="dossier.store.ElasticStore">
+<em class="property">class </em><code class="descclassname">dossier.store.</code><code class="descname">ElasticStore</code><span class="sig-paren">(</span><em>hosts=None</em>, <em>namespace=None</em>, <em>type='fc'</em>, <em>feature_indexes=None</em>, <em>shards=10</em>, <em>replicas=0</em>, <em>fulltext_indexes=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore" title="Permalink to this definition">¶</a></dt>
+<dd><p>A feature collection store on ElasticSearch.</p>
+<p>Feature collections are maps from feature names to features.
+The representation of each feature is unspecified by this
+interface.</p>
+<p>This class exposes a similar interface to the regular <code class="docutils literal"><span class="pre">Store</span></code>
+class, with a few additions:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li>Canopy scans are implemented natively with ElasticSearch,
+so they are provided as methods here.</li>
+<li>On all retrieval methods, the caller can pass a list of
+feature names (or feature name wildcards) to retrieve.
+If your FCs have lots of features, this is useful when
+you only need to retrieve a small fraction of them.</li>
+</ol>
+</div></blockquote>
+<dl class="method">
+<dt id="dossier.store.ElasticStore.__init__">
+<code class="descname">__init__</code><span class="sig-paren">(</span><em>hosts=None</em>, <em>namespace=None</em>, <em>type='fc'</em>, <em>feature_indexes=None</em>, <em>shards=10</em>, <em>replicas=0</em>, <em>fulltext_indexes=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a new store or connect to an existing one.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>hosts</strong> &#8211; Passed directly to <code class="docutils literal"><span class="pre">elasticsearch.Elasticsearch</span></code>
+constructor. Required.</li>
+<li><strong>namespace</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Used as the ES index name, prefixed by <code class="docutils literal"><span class="pre">fcs_</span></code>. Required.</li>
+<li><strong>type</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; The ES type to use. If this is set to <code class="docutils literal"><span class="pre">None</span></code>, then a random
+unique string is used.</li>
+<li><strong>feature_indexes</strong> (<em>[str]</em>) &#8211; A list of names of features to index.</li>
+<li><strong>shards</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) &#8211; The number of shards to use for this index. This only has an
+effect if the ES index didn&#8217;t previous exist.</li>
+<li><strong>replicas</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#int" title="(in Python v2.7)"><em>int</em></a>) &#8211; The number of replicas to use for this index. This only has
+an effect if the ES index didn&#8217;t previous exist.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last"><a class="reference internal" href="#dossier.store.ElasticStore" title="dossier.store.ElasticStore"><code class="xref py py-class docutils literal"><span class="pre">ElasticStore</span></code></a></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="dossier.store.ElasticStore.configured">
+<em class="property">classmethod </em><code class="descname">configured</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.configured"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.configured" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a new instance from the global configuration.</p>
+<p>In order to use this, you must make sure that
+<a class="reference internal" href="#dossier.store.ElasticStore" title="dossier.store.ElasticStore"><code class="xref py py-class docutils literal"><span class="pre">ElasticStore</span></code></a> has been configured by <code class="xref py py-mod docutils literal"><span class="pre">yakonfig</span></code>,
+usually by passing the class to <code class="docutils literal"><span class="pre">yakonfig.parse_args</span></code>.</p>
+</dd></dl>
+
+<p><strong>CRUD operations</strong></p>
+<dl class="method">
+<dt id="dossier.store.ElasticStore.get">
+<code class="descname">get</code><span class="sig-paren">(</span><em>content_id</em>, <em>feature_names=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.get"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve a feature collection.</p>
+<p>If a feature collection with the given id does not
+exist, then <code class="docutils literal"><span class="pre">None</span></code> is returned.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>content_id</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Content identifier.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last"><a class="reference internal" href="dossier.fc.html#dossier.fc.FeatureCollection" title="dossier.fc.FeatureCollection"><code class="xref py py-class docutils literal"><span class="pre">dossier.fc.FeatureCollection</span></code></a> or <code class="docutils literal"><span class="pre">None</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.get_many">
+<code class="descname">get_many</code><span class="sig-paren">(</span><em>content_ids</em>, <em>feature_names=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.get_many"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.get_many" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an iterable of feature collections.</p>
+<p>This efficiently retrieves multiple FCs corresponding to the
+list of ids given. Tuples of identifier and feature collection
+are yielded. If the feature collection for a given id does not
+exist, then <code class="docutils literal"><span class="pre">None</span></code> is returned as the second element of the
+tuple.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>content_ids</strong> (<em>[str]</em>) &#8211; List of content ids.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">FC)</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.put">
+<code class="descname">put</code><span class="sig-paren">(</span><em>items</em>, <em>indexes=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.put"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.put" title="Permalink to this definition">¶</a></dt>
+<dd><p>Adds feature collections to the store.</p>
+<p>This efficiently adds multiple FCs to the store. The iterable
+of <code class="docutils literal"><span class="pre">items</span></code> given should yield tuples of <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">FC)</span></code>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>items</strong> &#8211; Iterable of <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">FC)</span></code>.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.delete">
+<code class="descname">delete</code><span class="sig-paren">(</span><em>content_id</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.delete"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.delete" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deletes the corresponding feature collection.</p>
+<p>If the FC does not exist, then this is a no-op.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.delete_all">
+<code class="descname">delete_all</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.delete_all"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.delete_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deletes all feature collections.</p>
+<p>This does not destroy the ES index, but instead only
+deletes all FCs with the configured document type
+(defaults to <code class="docutils literal"><span class="pre">fc</span></code>).</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.delete_index">
+<code class="descname">delete_index</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.delete_index"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.delete_index" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deletes the underlying ES index.</p>
+<p>Only use this if you know what you&#8217;re doing. This destroys
+the entire underlying ES index, which could be shared by
+multiple distinct ElasticStore instances.</p>
+</dd></dl>
+
+<p><strong>Keyword scanning</strong></p>
+<dl class="method">
+<dt id="dossier.store.ElasticStore.keyword_scan">
+<code class="descname">keyword_scan</code><span class="sig-paren">(</span><em>query_id=None</em>, <em>query_fc=None</em>, <em>feature_names=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.keyword_scan"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.keyword_scan" title="Permalink to this definition">¶</a></dt>
+<dd><p>Keyword scan for feature collections.</p>
+<p>This performs a keyword scan using the query given. A keyword
+scan searches for FCs with terms in each of the query&#8217;s indexed
+fields.</p>
+<p>At least one of <code class="docutils literal"><span class="pre">query_id</span></code> or <code class="docutils literal"><span class="pre">query_fc</span></code> must be provided.
+If <code class="docutils literal"><span class="pre">query_fc</span></code> is <code class="docutils literal"><span class="pre">None</span></code>, then the query is retrieved
+automatically corresponding to <code class="docutils literal"><span class="pre">query_id</span></code>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>query_id</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Optional query id.</li>
+<li><strong>query_fc</strong> (<a class="reference internal" href="dossier.fc.html#dossier.fc.FeatureCollection" title="dossier.fc.FeatureCollection"><code class="xref py py-class docutils literal"><span class="pre">dossier.fc.FeatureCollection</span></code></a>) &#8211; Optional query feature collection.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">FC)</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.keyword_scan_ids">
+<code class="descname">keyword_scan_ids</code><span class="sig-paren">(</span><em>query_id=None</em>, <em>query_fc=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.keyword_scan_ids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.keyword_scan_ids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Keyword scan for ids.</p>
+<p>This performs a keyword scan using the query given. A keyword
+scan searches for FCs with terms in each of the query&#8217;s indexed
+fields.</p>
+<p>At least one of <code class="docutils literal"><span class="pre">query_id</span></code> or <code class="docutils literal"><span class="pre">query_fc</span></code> must be provided.
+If <code class="docutils literal"><span class="pre">query_fc</span></code> is <code class="docutils literal"><span class="pre">None</span></code>, then the query is retrieved
+automatically corresponding to <code class="docutils literal"><span class="pre">query_id</span></code>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>query_id</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Optional query id.</li>
+<li><strong>query_fc</strong> (<a class="reference internal" href="dossier.fc.html#dossier.fc.FeatureCollection" title="dossier.fc.FeatureCollection"><code class="xref py py-class docutils literal"><span class="pre">dossier.fc.FeatureCollection</span></code></a>) &#8211; Optional query feature collection.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">content_id</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<p><strong>Scanning ids in lexicographic order</strong></p>
+<p>Note that these operations may be inefficient because of
+how ElasticSearch handles sorting.</p>
+<dl class="method">
+<dt id="dossier.store.ElasticStore.scan">
+<code class="descname">scan</code><span class="sig-paren">(</span><em>*key_ranges</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.scan"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.scan" title="Permalink to this definition">¶</a></dt>
+<dd><p>Scan for FCs in the given id ranges.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>key_ranges</strong> &#8211; <code class="docutils literal"><span class="pre">key_ranges</span></code> should be a list of pairs of ranges. The first
+value is the lower bound id and the second value is the
+upper bound id. Use <code class="docutils literal"><span class="pre">()</span></code> in either position to leave it
+unbounded. If no <code class="docutils literal"><span class="pre">key_ranges</span></code> are given, then all FCs in
+the store are returned.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">FC)</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.scan_ids">
+<code class="descname">scan_ids</code><span class="sig-paren">(</span><em>*key_ranges</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.scan_ids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.scan_ids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Scan for ids only in the given id ranges.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>key_ranges</strong> &#8211; <code class="docutils literal"><span class="pre">key_ranges</span></code> should be a list of pairs of ranges. The first
+value is the lower bound id and the second value is the
+upper bound id. Use <code class="docutils literal"><span class="pre">()</span></code> in either position to leave it
+unbounded. If no <code class="docutils literal"><span class="pre">key_ranges</span></code> are given, then all FCs in
+the store are returned.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">content_id</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.scan_prefix">
+<code class="descname">scan_prefix</code><span class="sig-paren">(</span><em>prefix</em>, <em>feature_names=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.scan_prefix"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.scan_prefix" title="Permalink to this definition">¶</a></dt>
+<dd><p>Scan for FCs with a given prefix.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>prefix</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Identifier prefix.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">(content_id,</span> <span class="pre">FC)</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.scan_prefix_ids">
+<code class="descname">scan_prefix_ids</code><span class="sig-paren">(</span><em>prefix</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.scan_prefix_ids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.scan_prefix_ids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Scan for ids with a given prefix.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>prefix</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Identifier prefix.</li>
+<li><strong>feature_names</strong> (<em>[str]</em>) &#8211; A list of feature names to retrieve. When <code class="docutils literal"><span class="pre">None</span></code>, all
+features are retrieved. Wildcards are allowed.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">content_id</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<p><strong>Low-level</strong></p>
+<dl class="method">
+<dt id="dossier.store.ElasticStore.sync">
+<code class="descname">sync</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.sync"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.sync" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tells ES to tell Lucene to do an fsync.</p>
+<p>This guarantees that any previous calls to <code class="docutils literal"><span class="pre">put</span></code> will be
+flushed to disk and available in subsequent searches.</p>
+<p>Generally, this should only be used in test code.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.index_scan_ids">
+<code class="descname">index_scan_ids</code><span class="sig-paren">(</span><em>fname</em>, <em>val</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.index_scan_ids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.index_scan_ids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Low-level keyword index scan for ids.</p>
+<p>Retrieves identifiers of FCs that have a feature value
+<code class="docutils literal"><span class="pre">val</span></code> in the feature named <code class="docutils literal"><span class="pre">fname</span></code>. Note that
+<code class="docutils literal"><span class="pre">fname</span></code> must be indexed.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>fname</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Feature name.</li>
+<li><strong>val</strong> (<a class="reference external" href="http://docs.python.org/library/functions.html#str" title="(in Python v2.7)"><em>str</em></a>) &#8211; Feature value.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">Iterable of <code class="docutils literal"><span class="pre">content_id</span></code></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="dossier.store.ElasticStore.index_names">
+<code class="descname">index_names</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStore.index_names"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStore.index_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a list of all defined index names.</p>
+<p>Note that this only includes boolean based indexes.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list of <code class="docutils literal"><span class="pre">unicode</span></code></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="dossier.store.ElasticStoreSync">
+<em class="property">class </em><code class="descclassname">dossier.store.</code><code class="descname">ElasticStoreSync</code><span class="sig-paren">(</span><em>hosts=None</em>, <em>namespace=None</em>, <em>type='fc'</em>, <em>feature_indexes=None</em>, <em>shards=10</em>, <em>replicas=0</em>, <em>fulltext_indexes=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/store/elastic.html#ElasticStoreSync"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.store.ElasticStoreSync" title="Permalink to this definition">¶</a></dt>
+<dd><p>Synchronous ElasticSearch backend.</p>
+<p>This is just like <a class="reference internal" href="#dossier.store.ElasticStore" title="dossier.store.ElasticStore"><code class="xref py py-class docutils literal"><span class="pre">ElasticStore</span></code></a>, except it will call <cite>sync</cite>
+after every <code class="docutils literal"><span class="pre">put</span></code> and <code class="docutils literal"><span class="pre">delete</span></code> operation.</p>
+<p>This is useful for testing where it is most convenient for every
+write operation to be synchronous.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="kvlayer-based-storage">
+<h2>2.2. kvlayer based storage<a class="headerlink" href="#kvlayer-based-storage" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference internal" href="#module-dossier.store" title="dossier.store"><code class="xref py py-mod docutils literal"><span class="pre">dossier.store</span></code></a> also provides a convenient interface to a
+<code class="xref py py-mod docutils literal"><span class="pre">kvlayer</span></code> table for storing <a class="reference internal" href="dossier.fc.html#dossier.fc.FeatureCollection" title="dossier.fc.FeatureCollection"><code class="xref py py-class docutils literal"><span class="pre">dossier.fc.FeatureCollection</span></code></a>.
+The interface consists of methods to query, search, add and remove
+feature collections from the store. It also provides functions for
+defining and searching indexes.</p>
 <p>Using a storage backend in your code requires a working <code class="docutils literal"><span class="pre">kvlayer</span></code>
 configuration, which is usually written in a YAML file like so:</p>
 <div class="highlight-yaml"><div class="highlight"><pre><span class="l-Scalar-Plain">kvlayer</span><span class="p-Indicator">:</span>
@@ -476,6 +857,7 @@ feature collection.</p>
 </dd></dl>
 
 </div>
+</div>
 
 
           </div>
@@ -483,6 +865,15 @@ feature collection.</p>
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">2. <code class="docutils literal"><span class="pre">dossier.store</span></code> &#8212; store feature collections</a><ul>
+<li><a class="reference internal" href="#elasticsearch-based-storage">2.1. ElasticSearch based storage</a></li>
+<li><a class="reference internal" href="#kvlayer-based-storage">2.2. kvlayer based storage</a></li>
+</ul>
+</li>
+</ul>
+
   <h4>Previous topic</h4>
   <p class="topless"><a href="dossier.fc.html"
                         title="previous chapter">1. <code class="docutils literal"><span class="pre">dossier.fc</span></code> &#8212; feature collections</a></p>

@@ -288,7 +288,7 @@ it will be removed from the list of results.</p>
 
 <dl class="class">
 <dt id="dossier.web.filters.nilsimsa_near_duplicates">
-<em class="property">class </em><code class="descclassname">dossier.web.filters.</code><code class="descname">nilsimsa_near_duplicates</code><span class="sig-paren">(</span><em>label_store</em>, <em>store</em>, <em>nilsimsa_feature_name='nilsimsa_all'</em>, <em>threshold=119</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/filters.html#nilsimsa_near_duplicates"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.filters.nilsimsa_near_duplicates" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">dossier.web.filters.</code><code class="descname">nilsimsa_near_duplicates</code><span class="sig-paren">(</span><em>label_store</em>, <em>store</em>, <em>nilsimsa_feature_name='#nilsimsa_all'</em>, <em>threshold=0.9</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/filters.html#nilsimsa_near_duplicates"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.filters.nilsimsa_near_duplicates" title="Permalink to this definition">¶</a></dt>
 <dd><p>Filter results that nilsimsa says are highly similar.</p>
 <p>To perform an filtering, this requires that the FCs carry
 StringCounter at <cite>nilsimsa_feature_name</cite> and results with
@@ -913,6 +913,108 @@ element is the item&#8217;s subtopic id.</p>
 
 </div>
 <span class="target" id="module-dossier.web.folder"></span><p>Foldering for Dossier Stack.</p>
+<span class="target" id="module-dossier.web.tags"></span><div class="section" id="tagging-for-dossier-stack">
+<h3>5.1.4. Tagging for Dossier Stack<a class="headerlink" href="#tagging-for-dossier-stack" title="Permalink to this headline">¶</a></h3>
+<p>This module provides a Python class and a REST API to a <em>very simple</em>
+hierarchical tagging service with support for fast auto-completion.</p>
+<p>There are three flavors of routes: associate a tag with an object in
+an HTML document, list tags given a parent tag and list associations
+given some attribute (e.g., a tag or a stream id or a URL).</p>
+<dl class="function">
+<dt id="dossier.web.tags.v1_tag_associate">
+<code class="descclassname">dossier.web.tags.</code><code class="descname">v1_tag_associate</code><span class="sig-paren">(</span><em>request</em>, <em>tags</em>, <em>tag</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/tags.html#v1_tag_associate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.tags.v1_tag_associate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Associate an HTML element with a tag.</p>
+<p>The association should be a JSON serialized object on the
+request body. Here is an example association that should
+make the object&#8217;s structure clear:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+    <span class="s">&quot;url&quot;</span><span class="p">:</span> <span class="s">&quot;http://example.com/abc/xyz?foo=bar&quot;</span><span class="p">,</span>
+    <span class="s">&quot;text&quot;</span><span class="p">:</span> <span class="s">&quot;The text the user highlighted.&quot;</span><span class="p">,</span>
+    <span class="s">&quot;stream_id&quot;</span><span class="p">:</span> <span class="s">&quot;{unix timestamp}-{md5 of url}&quot;</span><span class="p">,</span>
+    <span class="s">&quot;hash&quot;</span><span class="p">:</span> <span class="s">&quot;{nilsimsa hash of the HTML}&quot;</span><span class="p">,</span>
+    <span class="s">&quot;timestamp&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">unix</span> <span class="n">timestamp</span><span class="p">},</span>
+    <span class="s">&quot;xpath&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s">&quot;start_node&quot;</span><span class="p">:</span> <span class="s">&quot;/html/body/p[1]/text()[2]&quot;</span><span class="p">,</span>
+        <span class="s">&quot;start_idx&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="s">&quot;end_node&quot;</span><span class="p">:</span> <span class="s">&quot;/html/body/p[1]/text()[3]&quot;</span><span class="p">,</span>
+        <span class="s">&quot;end_idx&quot;</span><span class="p">:</span> <span class="mi">9</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>All fields are required and cannot be empty or <code class="docutils literal"><span class="pre">null</span></code>.</p>
+<p>The tag of the association should be specified in the URL
+and is delimited by <code class="docutils literal"><span class="pre">//</span></code>.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.web.tags.v1_tag_list">
+<code class="descclassname">dossier.web.tags.</code><code class="descname">v1_tag_list</code><span class="sig-paren">(</span><em>tags</em>, <em>tag=''</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/tags.html#v1_tag_list"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.tags.v1_tag_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>List all direct children tags of the given parent.</p>
+<p>If no parent is specified, then list all top-level tags.</p>
+<p>The JSON returned for <code class="docutils literal"><span class="pre">/dossier/v1/tags/list/foo/bar</span></code>
+might look like this:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="p">{</span>
+    <span class="s">&#39;children&#39;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s">&#39;name&#39;</span><span class="p">:</span> <span class="s">&#39;baz&#39;</span><span class="p">,</span> <span class="s">&#39;parent&#39;</span><span class="p">:</span> <span class="s">&#39;bar&#39;</span><span class="p">,</span> <span class="s">&#39;tag&#39;</span><span class="p">:</span> <span class="s">&#39;foo/bar/baz&#39;</span><span class="p">},</span>
+    <span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.web.tags.v1_tag_suggest">
+<code class="descclassname">dossier.web.tags.</code><code class="descname">v1_tag_suggest</code><span class="sig-paren">(</span><em>request</em>, <em>tags</em>, <em>prefix</em>, <em>parent=''</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/tags.html#v1_tag_suggest"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.tags.v1_tag_suggest" title="Permalink to this definition">¶</a></dt>
+<dd><p>Provide fast suggestions for tag components.</p>
+<p>This yields suggestions for <em>components</em> of a tag and a given
+prefix. For example, given the tags <code class="docutils literal"><span class="pre">foo/bar/baz</span></code> and
+<code class="docutils literal"><span class="pre">fob/bob</span></code>, here are some example completions (ordering may be
+different):</p>
+<div class="highlight-text"><div class="highlight"><pre>/dossier/v1/tags/suggest/prefix/f =&gt; [&#39;foo&#39;, &#39;fob&#39;]
+/dossier/v1/tags/suggest/prefix/foo =&gt; [&#39;foo&#39;]
+/dossier/v1/tags/suggest/prefix/b/parent/foo =&gt; [&#39;bar&#39;]
+/dossier/v1/tags/suggest/prefix/b/parent/fob =&gt; [&#39;bob&#39;]
+/dossier/v1/tags/suggest/prefix/b/parent/foo/bar =&gt; [&#39;baz&#39;]
+</pre></div>
+</div>
+<p>N.B. Each of the lists above are wrapped in the following
+JSON envelope for the response:</p>
+<div class="highlight-text"><div class="highlight"><pre>{&#39;suggestions&#39;: [&#39;foo&#39;, &#39;fob&#39;]}
+</pre></div>
+</div>
+<p>An optional query parameter, <code class="docutils literal"><span class="pre">limit</span></code>, may be passed to control
+the number of suggestions returned.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.web.tags.v1_stream_id_associations">
+<code class="descclassname">dossier.web.tags.</code><code class="descname">v1_stream_id_associations</code><span class="sig-paren">(</span><em>tags</em>, <em>stream_id</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/tags.html#v1_stream_id_associations"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.tags.v1_stream_id_associations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve associations for a given stream_id.</p>
+<p>The associations returned have the exact same structure as defined
+in the <code class="docutils literal"><span class="pre">v1_tag_associate</span></code> route with one addition: a <code class="docutils literal"><span class="pre">tag</span></code>
+field contains the full tag name for the association.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.web.tags.v1_url_associations">
+<code class="descclassname">dossier.web.tags.</code><code class="descname">v1_url_associations</code><span class="sig-paren">(</span><em>tags</em>, <em>url</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/tags.html#v1_url_associations"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.tags.v1_url_associations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve associations for a given URL.</p>
+<p>The associations returned have the exact same structure as defined
+in the <code class="docutils literal"><span class="pre">v1_tag_associate</span></code> route with one addition: a <code class="docutils literal"><span class="pre">tag</span></code>
+field contains the full tag name for the association.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="dossier.web.tags.v1_tag_associations">
+<code class="descclassname">dossier.web.tags.</code><code class="descname">v1_tag_associations</code><span class="sig-paren">(</span><em>tags</em>, <em>tag</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/web/tags.html#v1_tag_associations"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.web.tags.v1_tag_associations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve associations for a given tag.</p>
+<p>The associations returned have the exact same structure as defined
+in the <code class="docutils literal"><span class="pre">v1_tag_associate</span></code> route with one addition: a <code class="docutils literal"><span class="pre">tag</span></code>
+field contains the full tag name for the association.</p>
+</dd></dl>
+
+</div>
 </div>
 </div>
 
@@ -929,6 +1031,7 @@ element is the item&#8217;s subtopic id.</p>
 <li><a class="reference internal" href="#search-engine-and-filter-interfaces">5.1.1. Search engine and filter interfaces</a></li>
 <li><a class="reference internal" href="#web-service-for-active-learning">5.1.2. Web service for active learning</a></li>
 <li><a class="reference internal" href="#managing-folders-and-sub-folders">5.1.3. Managing folders and sub-folders</a></li>
+<li><a class="reference internal" href="#tagging-for-dossier-stack">5.1.4. Tagging for Dossier Stack</a></li>
 </ul>
 </li>
 </ul>

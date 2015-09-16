@@ -172,7 +172,7 @@
 <span class="sd">    dossier/web/tests/test_filter_preds.py::test_nilsimsa_near_duplicates_speed_perf 209 filtered to 9 in 0.009230 seconds, 22643.802754 per second</span>
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label_store</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span>
-                 <span class="n">nilsimsa_feature_name</span><span class="o">=</span><span class="s">&#39;nilsimsa_all&#39;</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mi">119</span><span class="p">):</span>
+                 <span class="n">nilsimsa_feature_name</span><span class="o">=</span><span class="s">&#39;#nilsimsa_all&#39;</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.9</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">label_store</span> <span class="o">=</span> <span class="n">label_store</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">store</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nilsimsa_feature_name</span> <span class="o">=</span> <span class="n">nilsimsa_feature_name</span>
@@ -204,6 +204,7 @@
             <span class="k">for</span> <span class="n">hash1</span><span class="p">,</span> <span class="n">hash2</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="n">sim_feature</span><span class="p">,</span> <span class="n">accumulator</span><span class="p">):</span>
                 <span class="n">score</span> <span class="o">=</span> <span class="n">nilsimsa</span><span class="o">.</span><span class="n">compare_digests</span><span class="p">(</span><span class="n">hash1</span><span class="p">,</span> <span class="n">hash2</span><span class="p">,</span>
                                                  <span class="n">threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">)</span>
+                <span class="n">score</span> <span class="o">/=</span> <span class="mf">128.0</span>
                 <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">:</span>
                     <span class="c"># near duplicate, so filter and do not accumulate</span>
                     <span class="k">return</span> <span class="bp">False</span>

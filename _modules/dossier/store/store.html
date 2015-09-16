@@ -151,7 +151,6 @@
     <span class="p">}</span>
 
     <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">,</span> <span class="n">impl</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">feature_indexes</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="k">assert</span> <span class="bp">False</span><span class="p">,</span> <span class="s">&#39;deprecated&#39;</span>
         <span class="k">if</span> <span class="n">impl</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">Store</span><span class="p">,</span> <span class="n">cls</span><span class="p">)</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">,</span>
                                              <span class="n">feature_indexes</span><span class="o">=</span><span class="n">feature_indexes</span><span class="p">)</span>
@@ -169,7 +168,6 @@
 <span class="sd">        :type kvl: :class:`kvlayer.AbstractStorage`</span>
 <span class="sd">        :rtype: :class:`Store`</span>
 <span class="sd">        &#39;&#39;&#39;</span>
-        <span class="k">assert</span> <span class="bp">False</span><span class="p">,</span> <span class="s">&#39;deprecated&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_indexes</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
         <span class="n">kvlclient</span><span class="o">.</span><span class="n">setup_namespace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kvlayer_namespace</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">kvl</span> <span class="o">=</span> <span class="n">kvlclient</span>
@@ -527,11 +525,17 @@
         <span class="n">icreate</span><span class="p">,</span> <span class="n">itrans</span> <span class="o">=</span> <span class="n">idx</span><span class="p">[</span><span class="s">&#39;create&#39;</span><span class="p">],</span> <span class="n">idx</span><span class="p">[</span><span class="s">&#39;transform&#39;</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">idx_name</span><span class="p">,</span> <span class="nb">unicode</span><span class="p">):</span>
             <span class="n">idx_name</span> <span class="o">=</span> <span class="n">idx_name</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+
         <span class="k">for</span> <span class="n">cid_fc</span> <span class="ow">in</span> <span class="n">ids_and_fcs</span><span class="p">:</span>
             <span class="n">content_id</span> <span class="o">=</span> <span class="n">cid_fc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="c"># Be sure to dedup index_values or else we may</span>
+            <span class="c"># suffer duplicate_pkey errors down the line.</span>
+            <span class="n">seen_values</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">index_value</span> <span class="ow">in</span> <span class="n">icreate</span><span class="p">(</span><span class="n">itrans</span><span class="p">,</span> <span class="n">cid_fc</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">index_value</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">index_value</span> <span class="ow">and</span> <span class="n">index_value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen_values</span><span class="p">:</span>
                     <span class="k">yield</span> <span class="p">(</span><span class="n">index_value</span><span class="p">,</span> <span class="n">idx_name</span><span class="p">,</span> <span class="n">content_id</span><span class="p">)</span>
+                    <span class="n">seen_values</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">index_value</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Returns index transforms for ``name``.</span>

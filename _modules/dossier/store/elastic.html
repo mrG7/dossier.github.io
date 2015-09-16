@@ -1,0 +1,953 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.store.elastic &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.store.elastic</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;A native ElasticSearch implementation for dossier.store.</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2012-2014 Diffeo, Inc.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">base64</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">defaultdict</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">regex</span> <span class="kn">as</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="kn">import</span> <span class="nn">cbor</span>
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">FeatureCollection</span> <span class="k">as</span> <span class="n">FC</span>
+<span class="kn">import</span> <span class="nn">yakonfig</span>
+
+<span class="kn">from</span> <span class="nn">elasticsearch</span> <span class="kn">import</span> <span class="n">Elasticsearch</span><span class="p">,</span> <span class="n">NotFoundError</span><span class="p">,</span> <span class="n">TransportError</span>
+<span class="kn">from</span> <span class="nn">elasticsearch.helpers</span> <span class="kn">import</span> <span class="n">bulk</span><span class="p">,</span> <span class="n">scan</span>
+
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ElasticStore"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore">[docs]</a><span class="k">class</span> <span class="nc">ElasticStore</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;A feature collection store on ElasticSearch.</span>
+
+<span class="sd">    Feature collections are maps from feature names to features.</span>
+<span class="sd">    The representation of each feature is unspecified by this</span>
+<span class="sd">    interface.</span>
+
+<span class="sd">    This class exposes a similar interface to the regular ``Store``</span>
+<span class="sd">    class, with a few additions:</span>
+
+<span class="sd">      1. Canopy scans are implemented natively with ElasticSearch,</span>
+<span class="sd">         so they are provided as methods here.</span>
+<span class="sd">      2. On all retrieval methods, the caller can pass a list of</span>
+<span class="sd">         feature names (or feature name wildcards) to retrieve.</span>
+<span class="sd">         If your FCs have lots of features, this is useful when</span>
+<span class="sd">         you only need to retrieve a small fraction of them.</span>
+
+<span class="sd">    .. automethod:: __init__</span>
+<span class="sd">    .. automethod:: configured</span>
+
+<span class="sd">    **CRUD operations**</span>
+
+<span class="sd">    .. automethod:: get</span>
+<span class="sd">    .. automethod:: get_many</span>
+<span class="sd">    .. automethod:: put</span>
+<span class="sd">    .. automethod:: delete</span>
+<span class="sd">    .. automethod:: delete_all</span>
+<span class="sd">    .. automethod:: delete_index</span>
+
+<span class="sd">    **Keyword scanning**</span>
+
+<span class="sd">    .. automethod:: keyword_scan</span>
+<span class="sd">    .. automethod:: keyword_scan_ids</span>
+
+<span class="sd">    **Scanning ids in lexicographic order**</span>
+
+<span class="sd">    Note that these operations may be inefficient because of</span>
+<span class="sd">    how ElasticSearch handles sorting.</span>
+
+<span class="sd">    .. automethod:: scan</span>
+<span class="sd">    .. automethod:: scan_ids</span>
+<span class="sd">    .. automethod:: scan_prefix</span>
+<span class="sd">    .. automethod:: scan_prefix_ids</span>
+
+<span class="sd">    **Low-level**</span>
+
+<span class="sd">    .. automethod:: sync</span>
+<span class="sd">    .. automethod:: index_scan_ids</span>
+<span class="sd">    .. automethod:: index_names</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">config_name</span> <span class="o">=</span> <span class="s">&#39;dossier.store&#39;</span>
+
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="ElasticStore.configured"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.configured">[docs]</a>    <span class="k">def</span> <span class="nf">configured</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Create a new instance from the global configuration.</span>
+
+<span class="sd">        In order to use this, you must make sure that</span>
+<span class="sd">        :class:`ElasticStore` has been configured by :mod:`yakonfig`,</span>
+<span class="sd">        usually by passing the class to ``yakonfig.parse_args``.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">cls</span><span class="p">(</span><span class="o">**</span><span class="n">yakonfig</span><span class="o">.</span><span class="n">get_global_config</span><span class="p">(</span><span class="s">&#39;dossier.store&#39;</span><span class="p">))</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.__init__"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hosts</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s">&#39;fc&#39;</span><span class="p">,</span>
+                 <span class="n">feature_indexes</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">shards</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">replicas</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                 <span class="n">fulltext_indexes</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Create a new store or connect to an existing one.</span>
+
+<span class="sd">        :param hosts:</span>
+<span class="sd">          Passed directly to ``elasticsearch.Elasticsearch``</span>
+<span class="sd">          constructor. Required.</span>
+<span class="sd">        :param str namespace:</span>
+<span class="sd">          Used as the ES index name, prefixed by ``fcs_``. Required.</span>
+<span class="sd">        :param str type:</span>
+<span class="sd">          The ES type to use. If this is set to ``None``, then a random</span>
+<span class="sd">          unique string is used.</span>
+<span class="sd">        :param [str] feature_indexes:</span>
+<span class="sd">          A list of names of features to index.</span>
+<span class="sd">        :param int shards:</span>
+<span class="sd">          The number of shards to use for this index. This only has an</span>
+<span class="sd">          effect if the ES index didn&#39;t previous exist.</span>
+<span class="sd">        :param int replicas:</span>
+<span class="sd">          The number of replicas to use for this index. This only has</span>
+<span class="sd">          an effect if the ES index didn&#39;t previous exist.</span>
+<span class="sd">        :rtype: :class:`ElasticStore`</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">hosts</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">ProgrammerError</span><span class="p">(</span>
+                <span class="s">&#39;ElasticStore needs at least one host specified.&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">namespace</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">ProgrammerError</span><span class="p">(</span>
+                <span class="s">&#39;ElasticStore needs a namespace defined.&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">type</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="nb">type</span> <span class="o">=</span> <span class="nb">unicode</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">Elasticsearch</span><span class="p">(</span><span class="n">hosts</span><span class="o">=</span><span class="n">hosts</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="s">&#39;fcs_</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">namespace</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="nb">type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shards</span> <span class="o">=</span> <span class="n">shards</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">replicas</span> <span class="o">=</span> <span class="n">replicas</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">indexes</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexes</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">indexed_features</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexed_features</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_feature_indexes</span><span class="p">(</span><span class="n">feature_indexes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_fulltext_feature_indexes</span><span class="p">(</span><span class="n">fulltext_indexes</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">):</span>
+            <span class="c"># This can race, but that should be OK.</span>
+            <span class="c"># Worst case, we initialize with the same settings more than</span>
+            <span class="c"># once.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_create_index</span><span class="p">()</span>
+        <span class="n">mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">get_mapping</span><span class="p">(</span>
+            <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_create_mappings</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.get"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.get">[docs]</a>    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_id</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Retrieve a feature collection.</span>
+
+<span class="sd">        If a feature collection with the given id does not</span>
+<span class="sd">        exist, then ``None`` is returned.</span>
+
+<span class="sd">        :param str content_id: Content identifier.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: :class:`dossier.fc.FeatureCollection` or ``None``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                                 <span class="nb">id</span><span class="o">=</span><span class="n">eid</span><span class="p">(</span><span class="n">content_id</span><span class="p">),</span>
+                                 <span class="n">_source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">(</span><span class="n">feature_names</span><span class="p">))</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_from_dict</span><span class="p">(</span><span class="n">resp</span><span class="p">[</span><span class="s">&#39;_source&#39;</span><span class="p">][</span><span class="s">&#39;fc&#39;</span><span class="p">])</span>
+        <span class="k">except</span> <span class="n">NotFoundError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">raise</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.get_many"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.get_many">[docs]</a>    <span class="k">def</span> <span class="nf">get_many</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_ids</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns an iterable of feature collections.</span>
+
+<span class="sd">        This efficiently retrieves multiple FCs corresponding to the</span>
+<span class="sd">        list of ids given. Tuples of identifier and feature collection</span>
+<span class="sd">        are yielded. If the feature collection for a given id does not</span>
+<span class="sd">        exist, then ``None`` is returned as the second element of the</span>
+<span class="sd">        tuple.</span>
+
+<span class="sd">        :param [str] content_ids: List of content ids.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: Iterable of ``(content_id, FC)``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">resp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">mget</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                                  <span class="n">_source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">(</span><span class="n">feature_names</span><span class="p">),</span>
+                                  <span class="n">body</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;ids&#39;</span><span class="p">:</span> <span class="nb">map</span><span class="p">(</span><span class="n">eid</span><span class="p">,</span> <span class="n">content_ids</span><span class="p">)})</span>
+        <span class="k">except</span> <span class="n">TransportError</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">resp</span><span class="p">[</span><span class="s">&#39;docs&#39;</span><span class="p">]:</span>
+            <span class="n">fc</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="k">if</span> <span class="n">doc</span><span class="p">[</span><span class="s">&#39;found&#39;</span><span class="p">]:</span>
+                <span class="n">fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_from_dict</span><span class="p">(</span><span class="n">doc</span><span class="p">[</span><span class="s">&#39;_source&#39;</span><span class="p">][</span><span class="s">&#39;fc&#39;</span><span class="p">])</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">doc</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">]),</span> <span class="n">fc</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.put"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.put">[docs]</a>    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">indexes</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Adds feature collections to the store.</span>
+
+<span class="sd">        This efficiently adds multiple FCs to the store. The iterable</span>
+<span class="sd">        of ``items`` given should yield tuples of ``(content_id, FC)``.</span>
+
+<span class="sd">        :param items: Iterable of ``(content_id, FC)``.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">cid</span><span class="p">,</span> <span class="n">fc</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+            <span class="c"># TODO: If we store features in a columnar order, then we</span>
+            <span class="c"># could tell ES to index the feature values directly. ---AG</span>
+            <span class="c"># (But is problematic because we want to preserve the ability</span>
+            <span class="c"># to selectively index FCs. So we&#39;d probably need two distinct</span>
+            <span class="c"># doc types.)</span>
+            <span class="n">idxs</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">indexes</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexed_features</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">:</span>
+                        <span class="n">idxs</span><span class="p">[</span><span class="n">fname_to_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">)]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">fname</span><span class="p">])</span>
+                <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexed_features</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">fname</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">fname</span><span class="p">],</span> <span class="nb">basestring</span><span class="p">):</span>
+                        <span class="n">idxs</span><span class="p">[</span><span class="n">fname_to_full_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">)]</span> <span class="o">=</span> <span class="n">fc</span><span class="p">[</span><span class="n">fname</span><span class="p">]</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">idxs</span><span class="p">[</span><span class="n">fname_to_full_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">)]</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">fname</span><span class="p">])</span>
+            <span class="n">actions</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s">&#39;_index&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span>
+                <span class="s">&#39;_type&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                <span class="s">&#39;_id&#39;</span><span class="p">:</span> <span class="n">eid</span><span class="p">(</span><span class="n">cid</span><span class="p">),</span>
+                <span class="s">&#39;_op_type&#39;</span><span class="p">:</span> <span class="s">&#39;index&#39;</span><span class="p">,</span>
+                <span class="s">&#39;_source&#39;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">idxs</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span>
+                    <span class="s">&#39;fc&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_to_dict</span><span class="p">(</span><span class="n">fc</span><span class="p">),</span>
+                <span class="p">}),</span>
+            <span class="p">})</span>
+        <span class="n">bulk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">actions</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.delete"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content_id</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Deletes the corresponding feature collection.</span>
+
+<span class="sd">        If the FC does not exist, then this is a no-op.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                             <span class="nb">id</span><span class="o">=</span><span class="n">eid</span><span class="p">(</span><span class="n">content_id</span><span class="p">))</span>
+        <span class="k">except</span> <span class="n">NotFoundError</span><span class="p">:</span>
+            <span class="k">pass</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.delete_all"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.delete_all">[docs]</a>    <span class="k">def</span> <span class="nf">delete_all</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Deletes all feature collections.</span>
+
+<span class="sd">        This does not destroy the ES index, but instead only</span>
+<span class="sd">        deletes all FCs with the configured document type</span>
+<span class="sd">        (defaults to ``fc``).</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">delete_mapping</span><span class="p">(</span>
+                <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">TransportError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s">&#39;type </span><span class="si">%r</span><span class="s"> in index </span><span class="si">%r</span><span class="s"> already deleted&#39;</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.delete_index"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.delete_index">[docs]</a>    <span class="k">def</span> <span class="nf">delete_index</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Deletes the underlying ES index.</span>
+
+<span class="sd">        Only use this if you know what you&#39;re doing. This destroys</span>
+<span class="sd">        the entire underlying ES index, which could be shared by</span>
+<span class="sd">        multiple distinct ElasticStore instances.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.sync"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.sync">[docs]</a>    <span class="k">def</span> <span class="nf">sync</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Tells ES to tell Lucene to do an fsync.</span>
+
+<span class="sd">        This guarantees that any previous calls to ``put`` will be</span>
+<span class="sd">        flushed to disk and available in subsequent searches.</span>
+
+<span class="sd">        Generally, this should only be used in test code.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.scan"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.scan">[docs]</a>    <span class="k">def</span> <span class="nf">scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">key_ranges</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Scan for FCs in the given id ranges.</span>
+
+<span class="sd">        :param key_ranges:</span>
+<span class="sd">          ``key_ranges`` should be a list of pairs of ranges. The first</span>
+<span class="sd">          value is the lower bound id and the second value is the</span>
+<span class="sd">          upper bound id. Use ``()`` in either position to leave it</span>
+<span class="sd">          unbounded. If no ``key_ranges`` are given, then all FCs in</span>
+<span class="sd">          the store are returned.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: Iterable of ``(content_id, FC)``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan</span><span class="p">(</span><span class="o">*</span><span class="n">key_ranges</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_from_dict</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_source&#39;</span><span class="p">][</span><span class="s">&#39;fc&#39;</span><span class="p">])</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.scan_ids"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.scan_ids">[docs]</a>    <span class="k">def</span> <span class="nf">scan_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">key_ranges</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Scan for ids only in the given id ranges.</span>
+
+<span class="sd">        :param key_ranges:</span>
+<span class="sd">          ``key_ranges`` should be a list of pairs of ranges. The first</span>
+<span class="sd">          value is the lower bound id and the second value is the</span>
+<span class="sd">          upper bound id. Use ``()`` in either position to leave it</span>
+<span class="sd">          unbounded. If no ``key_ranges`` are given, then all FCs in</span>
+<span class="sd">          the store are returned.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: Iterable of ``content_id``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;feature_names&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan</span><span class="p">(</span><span class="o">*</span><span class="n">key_ranges</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">])</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.scan_prefix"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.scan_prefix">[docs]</a>    <span class="k">def</span> <span class="nf">scan_prefix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Scan for FCs with a given prefix.</span>
+
+<span class="sd">        :param str prefix: Identifier prefix.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: Iterable of ``(content_id, FC)``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">resp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan_prefix</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="n">feature_names</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">resp</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_from_dict</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_source&#39;</span><span class="p">][</span><span class="s">&#39;fc&#39;</span><span class="p">])</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.scan_prefix_ids"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.scan_prefix_ids">[docs]</a>    <span class="k">def</span> <span class="nf">scan_prefix_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Scan for ids with a given prefix.</span>
+
+<span class="sd">        :param str prefix: Identifier prefix.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: Iterable of ``content_id``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">resp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan_prefix</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">resp</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">])</span>
+</div>
+    <span class="k">def</span> <span class="nf">fulltext_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">query_fc</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                      <span class="n">preserve_order</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Fulltext search.</span>
+
+<span class="sd">        Yields an iterable of triples (score, identifier, FC)</span>
+<span class="sd">        corresponding to the search results of the fulltext search</span>
+<span class="sd">        in ``query``. This will only search text indexed under the</span>
+<span class="sd">        given feature named ``fname``.</span>
+
+<span class="sd">        Note that, unless ``preserve_order`` is set to True, the</span>
+<span class="sd">        ``score`` will always be 0.0, and the results will be</span>
+<span class="sd">        unordered. ``preserve_order`` set to True will cause the</span>
+<span class="sd">        results to be scored and be ordered by score, but you should</span>
+<span class="sd">        expect to see a decrease in performance.</span>
+
+<span class="sd">        :param str fname:</span>
+<span class="sd">          The feature to search.</span>
+<span class="sd">        :param unicode query:</span>
+<span class="sd">          The query.</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: Iterable of ``(score, content_id, FC)``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">it</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fulltext_scan</span><span class="p">(</span><span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">,</span>
+                                 <span class="n">feature_names</span><span class="o">=</span><span class="n">feature_names</span><span class="p">,</span>
+                                 <span class="n">preserve_order</span><span class="o">=</span><span class="n">preserve_order</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">it</span><span class="p">:</span>
+            <span class="n">fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_from_dict</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_source&#39;</span><span class="p">][</span><span class="s">&#39;fc&#39;</span><span class="p">])</span>
+            <span class="k">yield</span> <span class="n">hit</span><span class="p">[</span><span class="s">&#39;_score&#39;</span><span class="p">],</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">]),</span> <span class="n">fc</span>
+
+    <span class="k">def</span> <span class="nf">fulltext_scan_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">query_fc</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                          <span class="n">preserve_order</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Fulltext search for identifiers.</span>
+
+<span class="sd">        Yields an iterable of triples (score, identifier)</span>
+<span class="sd">        corresponding to the search results of the fulltext search</span>
+<span class="sd">        in ``query``. This will only search text indexed under the</span>
+<span class="sd">        given feature named ``fname``.</span>
+
+<span class="sd">        Note that, unless ``preserve_order`` is set to True, the</span>
+<span class="sd">        ``score`` will always be 0.0, and the results will be</span>
+<span class="sd">        unordered. ``preserve_order`` set to True will cause the</span>
+<span class="sd">        results to be scored and be ordered by score, but you should</span>
+<span class="sd">        expect to see a decrease in performance.</span>
+
+<span class="sd">        :param str fname:</span>
+<span class="sd">          The feature to search.</span>
+<span class="sd">        :param unicode query:</span>
+<span class="sd">          The query.</span>
+<span class="sd">        :rtype: Iterable of ``(score, content_id)``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">it</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fulltext_scan</span><span class="p">(</span><span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                                 <span class="n">preserve_order</span><span class="o">=</span><span class="n">preserve_order</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">it</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">hit</span><span class="p">[</span><span class="s">&#39;_score&#39;</span><span class="p">],</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">])</span>
+
+<div class="viewcode-block" id="ElasticStore.keyword_scan"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.keyword_scan">[docs]</a>    <span class="k">def</span> <span class="nf">keyword_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">query_fc</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Keyword scan for feature collections.</span>
+
+<span class="sd">        This performs a keyword scan using the query given. A keyword</span>
+<span class="sd">        scan searches for FCs with terms in each of the query&#39;s indexed</span>
+<span class="sd">        fields.</span>
+
+<span class="sd">        At least one of ``query_id`` or ``query_fc`` must be provided.</span>
+<span class="sd">        If ``query_fc`` is ``None``, then the query is retrieved</span>
+<span class="sd">        automatically corresponding to ``query_id``.</span>
+
+<span class="sd">        :param str query_id: Optional query id.</span>
+<span class="sd">        :param query_fc: Optional query feature collection.</span>
+<span class="sd">        :type query_fc: :class:`dossier.fc.FeatureCollection`</span>
+<span class="sd">        :param [str] feature_names:</span>
+<span class="sd">          A list of feature names to retrieve. When ``None``, all</span>
+<span class="sd">          features are retrieved. Wildcards are allowed.</span>
+<span class="sd">        :rtype: Iterable of ``(content_id, FC)``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">it</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keyword_scan</span><span class="p">(</span><span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">,</span>
+                                <span class="n">feature_names</span><span class="o">=</span><span class="n">feature_names</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">it</span><span class="p">:</span>
+            <span class="n">fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fc_from_dict</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_source&#39;</span><span class="p">][</span><span class="s">&#39;fc&#39;</span><span class="p">])</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">]),</span> <span class="n">fc</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.keyword_scan_ids"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.keyword_scan_ids">[docs]</a>    <span class="k">def</span> <span class="nf">keyword_scan_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">query_fc</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Keyword scan for ids.</span>
+
+<span class="sd">        This performs a keyword scan using the query given. A keyword</span>
+<span class="sd">        scan searches for FCs with terms in each of the query&#39;s indexed</span>
+<span class="sd">        fields.</span>
+
+<span class="sd">        At least one of ``query_id`` or ``query_fc`` must be provided.</span>
+<span class="sd">        If ``query_fc`` is ``None``, then the query is retrieved</span>
+<span class="sd">        automatically corresponding to ``query_id``.</span>
+
+<span class="sd">        :param str query_id: Optional query id.</span>
+<span class="sd">        :param query_fc: Optional query feature collection.</span>
+<span class="sd">        :type query_fc: :class:`dossier.fc.FeatureCollection`</span>
+<span class="sd">        :rtype: Iterable of ``content_id``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">it</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keyword_scan</span><span class="p">(</span><span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">it</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">])</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.index_scan_ids"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.index_scan_ids">[docs]</a>    <span class="k">def</span> <span class="nf">index_scan_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fname</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Low-level keyword index scan for ids.</span>
+
+<span class="sd">        Retrieves identifiers of FCs that have a feature value</span>
+<span class="sd">        ``val`` in the feature named ``fname``. Note that</span>
+<span class="sd">        ``fname`` must be indexed.</span>
+
+<span class="sd">        :param str fname: Feature name.</span>
+<span class="sd">        :param str val: Feature value.</span>
+<span class="sd">        :rtype: Iterable of ``content_id``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">disj</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">fname2</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexes</span><span class="p">[</span><span class="n">fname</span><span class="p">][</span><span class="s">&#39;feature_names&#39;</span><span class="p">]:</span>
+            <span class="n">disj</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s">&#39;term&#39;</span><span class="p">:</span> <span class="p">{</span><span class="n">fname_to_idx_name</span><span class="p">(</span><span class="n">fname2</span><span class="p">):</span> <span class="n">val</span><span class="p">}})</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;constant_score&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;filter&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;or&#39;</span><span class="p">:</span> <span class="n">disj</span><span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+        <span class="n">hits</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="p">{</span>
+            <span class="s">&#39;_source&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">,</span>
+            <span class="s">&#39;query&#39;</span><span class="p">:</span> <span class="n">query</span><span class="p">,</span>
+        <span class="p">})</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">hits</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">did</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">])</span>
+</div>
+<div class="viewcode-block" id="ElasticStore.index_names"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStore.index_names">[docs]</a>    <span class="k">def</span> <span class="nf">index_names</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns a list of all defined index names.</span>
+
+<span class="sd">        Note that this only includes boolean based indexes.</span>
+
+<span class="sd">        :rtype: list of ``unicode``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="nb">map</span><span class="p">(</span><span class="nb">unicode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexes</span><span class="o">.</span><span class="n">iterkeys</span><span class="p">())</span>
+</div>
+    <span class="k">def</span> <span class="nf">fulltext_index_names</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns a list of all defined fulltext index names.</span>
+
+<span class="sd">        :rtype: list of ``unicode``</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="nb">map</span><span class="p">(</span><span class="nb">unicode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexes</span><span class="o">.</span><span class="n">iterkeys</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">_fulltext_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">,</span> <span class="n">preserve_order</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                       <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="n">query_fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_query_fc</span><span class="p">(</span><span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([]</span> <span class="k">if</span> <span class="n">query_id</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">eid</span><span class="p">(</span><span class="n">query_id</span><span class="p">)])</span>
+        <span class="k">for</span> <span class="n">fname</span><span class="p">,</span> <span class="n">features</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexes</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">qvals</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">unicode</span><span class="p">,</span> <span class="n">query_fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">qvals</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">qmatches</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">qfields</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">fname_to_full_idx_name</span><span class="p">,</span> <span class="n">features</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">qval</span> <span class="ow">in</span> <span class="n">qvals</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s">&#39;\p{Punct}&#39;</span><span class="p">,</span> <span class="n">qval</span><span class="p">):</span>
+                    <span class="n">match_type</span> <span class="o">=</span> <span class="s">&#39;phrase&#39;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">match_type</span> <span class="o">=</span> <span class="s">&#39;best_fields&#39;</span>
+                <span class="n">qmatches</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                    <span class="s">&#39;multi_match&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="n">match_type</span><span class="p">,</span>
+                        <span class="s">&#39;query&#39;</span><span class="p">:</span> <span class="n">qval</span><span class="p">,</span>
+                        <span class="s">&#39;fields&#39;</span><span class="p">:</span> <span class="n">qfields</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">})</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s">&#39;filtered&#39;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s">&#39;query&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s">&#39;bool&#39;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s">&#39;should&#39;</span><span class="p">:</span> <span class="n">qmatches</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">},</span>
+                    <span class="s">&#39;filter&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s">&#39;not&#39;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s">&#39;ids&#39;</span><span class="p">:</span> <span class="p">{</span>
+                                <span class="s">&#39;values&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">ids</span><span class="p">),</span>
+                            <span class="p">},</span>
+                        <span class="p">},</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+            <span class="p">}</span>
+
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;fulltext scanning index: </span><span class="si">%s</span><span class="s">, query: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">fname</span><span class="p">,</span> <span class="n">qvals</span><span class="p">)</span>
+            <span class="n">hits</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                <span class="n">preserve_order</span><span class="o">=</span><span class="n">preserve_order</span><span class="p">,</span>
+                <span class="n">query</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s">&#39;_source&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">(</span><span class="n">feature_names</span><span class="p">),</span>
+                    <span class="s">&#39;query&#39;</span><span class="p">:</span> <span class="n">query</span><span class="p">,</span>
+                <span class="p">})</span>
+            <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">hits</span><span class="p">:</span>
+                <span class="n">ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">eid</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">]))</span>
+                <span class="k">yield</span> <span class="n">hit</span>
+
+    <span class="k">def</span> <span class="nf">_keyword_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="c"># Why are we running multiple scans? Why are we deduplicating?</span>
+        <span class="c">#</span>
+        <span class="c"># It turns out that, in our various systems, it can be important to</span>
+        <span class="c"># prioritize the order of results returned in a keyword scan based on</span>
+        <span class="c"># the feature index that is being searched. For example, we typically</span>
+        <span class="c"># want to start a keyword scan with the results from a search on</span>
+        <span class="c"># `NAME`, which we don&#39;t want to be mingled with the results from a</span>
+        <span class="c"># search on some other feature.</span>
+        <span class="c">#</span>
+        <span class="c"># The simplest way to guarantee this type of prioritization is to run</span>
+        <span class="c"># a query for each index in the order in which they were defined.</span>
+        <span class="c">#</span>
+        <span class="c"># This has some downsides:</span>
+        <span class="c">#</span>
+        <span class="c"># 1. We return *all* results for the first index before ever returning</span>
+        <span class="c">#    results for the second.</span>
+        <span class="c"># 2. Since we&#39;re running multiple queries, we could get back results</span>
+        <span class="c">#    we&#39;ve already retrieved in a previous query.</span>
+        <span class="c">#</span>
+        <span class="c"># We accept (1) for now.</span>
+        <span class="c">#</span>
+        <span class="c"># To fix (2), we keep track of all ids we&#39;ve seen and include them</span>
+        <span class="c"># as a filter in subsequent queries.</span>
+        <span class="n">query_fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_query_fc</span><span class="p">(</span><span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([]</span> <span class="k">if</span> <span class="n">query_id</span> <span class="ow">is</span> <span class="bp">None</span> <span class="k">else</span> <span class="p">[</span><span class="n">eid</span><span class="p">(</span><span class="n">query_id</span><span class="p">)])</span>
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexes</span><span class="p">:</span>
+            <span class="n">term_disj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fc_index_disjunction_from_query</span><span class="p">(</span><span class="n">query_fc</span><span class="p">,</span> <span class="n">fname</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">term_disj</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s">&#39;constant_score&#39;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s">&#39;filter&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s">&#39;and&#39;</span><span class="p">:</span> <span class="p">[{</span>
+                            <span class="s">&#39;not&#39;</span><span class="p">:</span> <span class="p">{</span>
+                                <span class="s">&#39;ids&#39;</span><span class="p">:</span> <span class="p">{</span>
+                                    <span class="s">&#39;values&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">ids</span><span class="p">),</span>
+                                <span class="p">},</span>
+                            <span class="p">},</span>
+                        <span class="p">},</span> <span class="p">{</span>
+                            <span class="s">&#39;or&#39;</span><span class="p">:</span> <span class="n">term_disj</span><span class="p">,</span>
+                        <span class="p">}],</span>
+                    <span class="p">},</span>
+                <span class="p">},</span>
+            <span class="p">}</span>
+
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;keyword scanning index: </span><span class="si">%s</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">fname</span><span class="p">)</span>
+            <span class="n">hits</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                <span class="n">query</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s">&#39;_source&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">(</span><span class="n">feature_names</span><span class="p">),</span>
+                    <span class="s">&#39;query&#39;</span><span class="p">:</span> <span class="n">query</span><span class="p">,</span>
+                <span class="p">})</span>
+            <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">hits</span><span class="p">:</span>
+                <span class="n">ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">eid</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s">&#39;_id&#39;</span><span class="p">]))</span>
+                <span class="k">yield</span> <span class="n">hit</span>
+
+    <span class="k">def</span> <span class="nf">_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">key_ranges</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">feature_names</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;feature_names&#39;</span><span class="p">)</span>
+        <span class="n">range_filters</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_range_filters</span><span class="p">(</span><span class="o">*</span><span class="n">key_ranges</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                    <span class="n">_source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">(</span><span class="n">feature_names</span><span class="p">),</span>
+                    <span class="n">preserve_order</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                    <span class="n">query</span><span class="o">=</span><span class="p">{</span>
+                        <span class="c"># Sorting by `_id` seems to fail spuriously and</span>
+                        <span class="c"># I have no idea why. ---AG</span>
+                        <span class="s">&#39;sort&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;_uid&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;order&#39;</span><span class="p">:</span> <span class="s">&#39;asc&#39;</span><span class="p">}},</span>
+                        <span class="s">&#39;query&#39;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s">&#39;constant_score&#39;</span><span class="p">:</span> <span class="p">{</span>
+                                <span class="s">&#39;filter&#39;</span><span class="p">:</span> <span class="p">{</span>
+                                    <span class="s">&#39;and&#39;</span><span class="p">:</span> <span class="n">range_filters</span><span class="p">,</span>
+                                <span class="p">},</span>
+                            <span class="p">},</span>
+                        <span class="p">},</span>
+                    <span class="p">})</span>
+
+    <span class="k">def</span> <span class="nf">_scan_prefix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">feature_names</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;constant_score&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;filter&#39;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s">&#39;and&#39;</span><span class="p">:</span> <span class="p">[{</span>
+                        <span class="s">&#39;prefix&#39;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s">&#39;_id&#39;</span><span class="p">:</span> <span class="n">eid</span><span class="p">(</span><span class="n">prefix</span><span class="p">),</span>
+                        <span class="p">},</span>
+                    <span class="p">}],</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+                    <span class="n">_source</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_source</span><span class="p">(</span><span class="n">feature_names</span><span class="p">),</span>
+                    <span class="n">preserve_order</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                    <span class="n">query</span><span class="o">=</span><span class="p">{</span>
+                        <span class="c"># Sorting by `_id` seems to fail spuriously and</span>
+                        <span class="c"># I have no idea why. ---AG</span>
+                        <span class="s">&#39;sort&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;_uid&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;order&#39;</span><span class="p">:</span> <span class="s">&#39;asc&#39;</span><span class="p">}},</span>
+                        <span class="s">&#39;query&#39;</span><span class="p">:</span> <span class="n">query</span><span class="p">,</span>
+                    <span class="p">})</span>
+
+    <span class="k">def</span> <span class="nf">_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feature_names</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Maps feature names to ES&#39;s &quot;_source&quot; field.&#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">feature_names</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">True</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">feature_names</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">feature_names</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="s">&#39;fc.&#39;</span> <span class="o">+</span> <span class="n">n</span><span class="p">,</span> <span class="n">feature_names</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_range_filters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">key_ranges</span><span class="p">):</span>
+        <span class="s">&#39;Creates ES filters for key ranges used in scanning.&#39;</span>
+        <span class="n">filters</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">s</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">key_ranges</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
+                <span class="n">s</span> <span class="o">=</span> <span class="n">eid</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
+                <span class="c"># Make the range inclusive.</span>
+                <span class="c"># We need a valid codepoint, so use the max.</span>
+                <span class="n">e</span> <span class="o">+=</span> <span class="s">u&#39;</span><span class="se">\U0010FFFF</span><span class="s">&#39;</span>
+                <span class="n">e</span> <span class="o">=</span> <span class="n">eid</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">s</span> <span class="o">==</span> <span class="p">()</span> <span class="ow">and</span> <span class="n">e</span> <span class="o">==</span> <span class="p">():</span>
+                <span class="n">filters</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s">&#39;match_all&#39;</span><span class="p">:</span> <span class="p">{}})</span>
+            <span class="k">elif</span> <span class="n">e</span> <span class="o">==</span> <span class="p">():</span>
+                <span class="n">filters</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s">&#39;range&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;_id&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;gte&#39;</span><span class="p">:</span> <span class="n">s</span><span class="p">}}})</span>
+            <span class="k">elif</span> <span class="n">s</span> <span class="o">==</span> <span class="p">():</span>
+                <span class="n">filters</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s">&#39;range&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;_id&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;lte&#39;</span><span class="p">:</span> <span class="n">e</span><span class="p">}}})</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">filters</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s">&#39;range&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;_id&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;gte&#39;</span><span class="p">:</span> <span class="n">s</span><span class="p">,</span> <span class="s">&#39;lte&#39;</span><span class="p">:</span> <span class="n">e</span><span class="p">}}})</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">filters</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[{</span><span class="s">&#39;match_all&#39;</span><span class="p">:</span> <span class="p">{}}]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">filters</span>
+
+    <span class="k">def</span> <span class="nf">_create_index</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s">&#39;Create the index&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+                <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">body</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s">&#39;settings&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s">&#39;number_of_shards&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">shards</span><span class="p">,</span>
+                        <span class="s">&#39;number_of_replicas&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">replicas</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">})</span>
+        <span class="k">except</span> <span class="n">TransportError</span><span class="p">:</span>
+            <span class="c"># Hope that this is an &quot;index already exists&quot; error...</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s">&#39;index already exists? OK&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="k">pass</span>
+
+    <span class="k">def</span> <span class="nf">_create_mappings</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s">&#39;Create the field type mapping.&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">put_mapping</span><span class="p">(</span>
+            <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+            <span class="n">body</span><span class="o">=</span><span class="p">{</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s">&#39;dynamic_templates&#39;</span><span class="p">:</span> <span class="p">[{</span>
+                        <span class="s">&#39;default_no_analyze_fc&#39;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s">&#39;match&#39;</span><span class="p">:</span> <span class="s">&#39;fc.*&#39;</span><span class="p">,</span>
+                            <span class="s">&#39;mapping&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;index&#39;</span><span class="p">:</span> <span class="s">&#39;no&#39;</span><span class="p">},</span>
+                        <span class="p">},</span>
+                    <span class="p">}],</span>
+                    <span class="s">&#39;_all&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s">&#39;enabled&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s">&#39;_id&#39;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s">&#39;index&#39;</span><span class="p">:</span> <span class="s">&#39;not_analyzed&#39;</span><span class="p">,</span>  <span class="c"># allows range queries</span>
+                    <span class="p">},</span>
+                    <span class="s">&#39;properties&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_index_mappings</span><span class="p">(),</span>
+                <span class="p">},</span>
+            <span class="p">})</span>
+        <span class="c"># It is possible to create an index and quickly launch a request</span>
+        <span class="c"># that will fail because the index hasn&#39;t been set up yet. Usually,</span>
+        <span class="c"># you&#39;ll get a &quot;no active shards available&quot; error.</span>
+        <span class="c">#</span>
+        <span class="c"># Since index creation is a very rare operation (it only happens</span>
+        <span class="c"># when the index doesn&#39;t already exist), we sit and wait for the</span>
+        <span class="c"># cluster to become healthy.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">health</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">wait_for_status</span><span class="o">=</span><span class="s">&#39;yellow&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_get_index_mappings</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s">&#39;Retrieve the field mappings. Useful for debugging.&#39;</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexed_features</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="k">print</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+            <span class="n">maps</span><span class="p">[</span><span class="n">fname_to_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;es_index_type&#39;</span><span class="p">,</span> <span class="s">&#39;integer&#39;</span><span class="p">),</span>
+                <span class="s">&#39;store&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">,</span>
+                <span class="s">&#39;index&#39;</span><span class="p">:</span> <span class="s">&#39;not_analyzed&#39;</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexed_features</span><span class="p">:</span>
+            <span class="n">maps</span><span class="p">[</span><span class="n">fname_to_full_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="s">&#39;string&#39;</span><span class="p">,</span>
+                <span class="s">&#39;store&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">,</span>
+                <span class="s">&#39;index&#39;</span><span class="p">:</span> <span class="s">&#39;analyzed&#39;</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="k">return</span> <span class="n">maps</span>
+
+    <span class="k">def</span> <span class="nf">_get_field_types</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="s">&#39;Retrieve the field types. Useful for debugging.&#39;</span>
+        <span class="n">mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">get_mapping</span><span class="p">(</span>
+            <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">doc_type</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mapping</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">index</span><span class="p">][</span><span class="s">&#39;mappings&#39;</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">][</span><span class="s">&#39;properties&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_normalize_fulltext_feature_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fulltext_indexes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">fulltext_indexes</span> <span class="ow">or</span> <span class="p">[]:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;only one mapping per index entry allowed&#39;</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">keys</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">x</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">features</span>
+            <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">features</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fulltext_indexed_features</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_normalize_feature_indexes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feature_indexes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">feature_indexes</span> <span class="ow">or</span> <span class="p">[]:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;only one mapping per index entry allowed&#39;</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">keys</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">Mapping</span><span class="p">):</span>
+                    <span class="n">index_type</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s">&#39;es_index_type&#39;</span><span class="p">]</span>
+                    <span class="n">features</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s">&#39;feature_names&#39;</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">index_type</span> <span class="o">=</span> <span class="s">&#39;integer&#39;</span>
+                    <span class="n">features</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">x</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="p">]</span>
+                <span class="n">index_type</span> <span class="o">=</span> <span class="s">&#39;integer&#39;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">indexes</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s">&#39;feature_names&#39;</span><span class="p">:</span> <span class="n">features</span><span class="p">,</span>
+                <span class="s">&#39;es_index_type&#39;</span><span class="p">:</span> <span class="n">index_type</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">features</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">indexed_features</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_fc_index_disjunction_from_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">,</span> <span class="n">fname</span><span class="p">):</span>
+        <span class="s">&#39;Creates a disjunction for keyword scan queries.&#39;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">query_fc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="p">[]))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="n">terms</span> <span class="o">=</span> <span class="n">query_fc</span><span class="p">[</span><span class="n">fname</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+        <span class="n">disj</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexes</span><span class="p">[</span><span class="n">fname</span><span class="p">][</span><span class="s">&#39;feature_names&#39;</span><span class="p">]:</span>
+            <span class="n">disj</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s">&#39;terms&#39;</span><span class="p">:</span> <span class="p">{</span><span class="n">fname_to_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">):</span> <span class="n">terms</span><span class="p">}})</span>
+        <span class="k">return</span> <span class="n">disj</span>
+
+    <span class="k">def</span> <span class="nf">fc_to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fc</span><span class="p">):</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">feat</span> <span class="ow">in</span> <span class="n">fc</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="c"># This is a hack to drop the clean_visible feature because it</span>
+            <span class="c"># is not necessary to store it and it is large. We simply need</span>
+            <span class="c"># to index it.</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s">&#39;#clean_visible&#39;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">cbor</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">feat</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">d</span>
+
+    <span class="k">def</span> <span class="nf">fc_from_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fc_dict</span><span class="p">):</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">feat</span> <span class="ow">in</span> <span class="n">fc_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">cbor</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">feat</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">FC</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">get_query_fc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query_id</span><span class="p">,</span> <span class="n">query_fc</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">query_fc</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">query_id</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s">&#39;one of query_id or query_fc must not be None&#39;</span><span class="p">)</span>
+            <span class="n">query_fc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">query_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">query_fc</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="n">query_id</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">query_fc</span>
+
+</div>
+<div class="viewcode-block" id="ElasticStoreSync"><a class="viewcode-back" href="../../../dossier.store.html#dossier.store.ElasticStoreSync">[docs]</a><span class="k">class</span> <span class="nc">ElasticStoreSync</span><span class="p">(</span><span class="n">ElasticStore</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Synchronous ElasticSearch backend.</span>
+
+<span class="sd">    This is just like :class:`ElasticStore`, except it will call `sync`</span>
+<span class="sd">    after every ``put`` and ``delete`` operation.</span>
+
+<span class="sd">    This is useful for testing where it is most convenient for every</span>
+<span class="sd">    write operation to be synchronous.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">ElasticStoreSync</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">ElasticStoreSync</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
+
+</div>
+<span class="k">def</span> <span class="nf">eid</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Encode id (bytes) as a Unicode string.</span>
+
+<span class="sd">    The encoding is done such that lexicographic order is</span>
+<span class="sd">    preserved. No concern is given to wasting space.</span>
+
+<span class="sd">    The inverse of ``eid`` is ``did``.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="nb">unicode</span><span class="p">):</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s">u&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s">&#39;{:02x}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="n">b</span><span class="p">))</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">s</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">did</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Decode id (Unicode string) as a bytes.</span>
+
+<span class="sd">    The inverse of ``did`` is ``eid``.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">return</span> <span class="s">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">chr</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">2</span><span class="p">],</span> <span class="n">base</span><span class="o">=</span><span class="mi">16</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="mi">2</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">idx_name_to_fname</span><span class="p">(</span><span class="n">idx_name</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">idx_name</span><span class="p">[</span><span class="mi">4</span><span class="p">:]</span>
+
+
+<span class="k">def</span> <span class="nf">fname_to_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s">u&#39;idx_</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">fname</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">full_idx_name_to_fname</span><span class="p">(</span><span class="n">idx_name</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">idx_name</span><span class="p">[</span><span class="mi">9</span><span class="p">:]</span>
+
+
+<span class="k">def</span> <span class="nf">fname_to_full_idx_name</span><span class="p">(</span><span class="n">fname</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s">u&#39;full_idx_</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">fname</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>
