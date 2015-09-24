@@ -67,7 +67,19 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="dossier.models.html">4. <code class="docutils literal"><span class="pre">dossier.models</span></code> &#8212; Active learning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dossier.models.html">4. <code class="docutils literal"><span class="pre">dossier.models</span></code> &#8212; Active learning</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dossier.models.html#web-services-for-active-learning-search-engines">4.1. Web services for active learning search engines</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dossier.models.html#web-service-endpoints">4.1.1. Web service endpoints</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dossier.models.html#how-the-sorting-desk-browser-extension-works">4.1.2. How the Sorting Desk browser extension works</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dossier.models.html#active-learning-pairwise-search-engines">4.2. Active learning pairwise search engines</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dossier.models.html#feature-extraction">4.3. Feature extraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dossier.models.html#dragnet">4.4. Dragnet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dossier.models.html#soft-selectors">4.5. Soft selectors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dossier.models.html#module-dossier.models.linker.model">4.6. Linking</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="dossier.web.html">5. <code class="docutils literal"><span class="pre">dossier.web</span></code> &#8212; DossierStack web services</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="dossier.web.html#dossier-web-provides-rest-web-services-for-dossier-stack">5.1. dossier.web provides REST web services for Dossier Stack</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="dossier.web.html#search-engine-and-filter-interfaces">5.1.1. Search engine and filter interfaces</a></li>
@@ -80,6 +92,110 @@
 </li>
 </ul>
 </div>
+</div>
+<div class="section" id="diffeo-highlighter-service">
+<h1>Diffeo Highlighter service<a class="headerlink" href="#diffeo-highlighter-service" title="Permalink to this headline">¶</a></h1>
+<dl class="function">
+<dt id="dossier.models.web.routes.v1_highlights_post">
+<code class="descclassname">dossier.models.web.routes.</code><code class="descname">v1_highlights_post</code><span class="sig-paren">(</span><em>request</em>, <em>response</em>, <em>tfidf</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/dossier/models/web/routes.html#v1_highlights_post"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#dossier.models.web.routes.v1_highlights_post" title="Permalink to this definition">¶</a></dt>
+<dd><p>Obtain highlights for a document POSTed inside a JSON object.</p>
+<p>Get our Diffeo Highlighter browser extension here:
+<a class="reference external" href="https://chrome.google.com/webstore/detail/jgfcplgdmjkdepnmbdkmgohaldaiplpo">https://chrome.google.com/webstore/detail/jgfcplgdmjkdepnmbdkmgohaldaiplpo</a></p>
+<p>The route for this endpoint is:
+<code class="docutils literal"><span class="pre">POST</span> <span class="pre">/dossier/v1/highlights</span></code>.</p>
+<p>The expected input structure is a JSON encoded string of an
+object with these keys:</p>
+<div class="highlight-javascript"><div class="highlight"><pre><span class="p">{</span>
+  <span class="c1">// only text/html is supported at this time; hopefully PDF.js</span>
+  <span class="c1">// enables this to support PDF rendering too.</span>
+  <span class="s2">&quot;content-type&quot;</span><span class="o">:</span> <span class="s2">&quot;text/html&quot;</span><span class="p">,</span>
+
+  <span class="c1">// URL of the page (after resolving all redirects)</span>
+  <span class="s2">&quot;content-location&quot;</span><span class="o">:</span> <span class="s2">&quot;http://...&quot;</span><span class="p">,</span>
+
+  <span class="c1">// If provided by the original host, this will be populated,</span>
+  <span class="c1">// otherwise it is empty.</span>
+  <span class="s2">&quot;last-modified&quot;</span><span class="o">:</span> <span class="s2">&quot;datetime string or empty string&quot;</span><span class="p">,</span>
+
+  <span class="c1">// full page contents obtained by Javascript in the browser</span>
+  <span class="c1">// extension accessing `document.documentElement.innerHTML`.</span>
+  <span class="c1">// This must be UTF-8 encoded.</span>
+  <span class="c1">// N.B. This needs experimentation to figure out whether the</span>
+  <span class="c1">// browser will always encode this as Unicode.</span>
+  <span class="s2">&quot;body&quot;</span><span class="o">:</span> <span class="s2">&quot;... the body content ...&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The output structure is a JSON UTF-8 encoded string of an
+object with these keys:</p>
+<div class="highlight-javascript"><div class="highlight"><pre><span class="p">{</span>
+  <span class="s2">&quot;highlights&quot;</span><span class="o">:</span> <span class="p">[</span><span class="nx">Highlight</span><span class="p">,</span> <span class="nx">Highlight</span><span class="p">,</span> <span class="p">...]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where a <cite>Highlight</cite> object has this structure:</p>
+<div class="highlight-javascript"><div class="highlight"><pre><span class="p">{</span>
+  <span class="c1">// float in the range [0, 1]</span>
+  <span class="s2">&quot;score&quot;</span><span class="o">:</span> <span class="mf">0.7</span>
+
+  <span class="c1">// a string presented with a check box inside the options</span>
+  <span class="c1">// bubble when the user clicks the extension icon to choose</span>
+  <span class="c1">// which categories of highlights should be displayed.</span>
+  <span class="s2">&quot;category&quot;</span><span class="o">:</span> <span class="s2">&quot;Organization&quot;</span><span class="p">,</span>
+
+  <span class="c1">// `queries` are strings that are to be presented as</span>
+  <span class="c1">// suggestions to the user, and the extension enables the user</span>
+  <span class="c1">// to click any of the configured search engines to see</span>
+  <span class="c1">// results for a selected query string.</span>
+  <span class="s2">&quot;queries&quot;</span><span class="o">:</span> <span class="p">[],</span>
+
+  <span class="c1">// zero or more strings to match in the document and highlight</span>
+  <span class="c1">// with a single color.</span>
+  <span class="s2">&quot;strings&quot;</span><span class="o">:</span> <span class="p">[],</span>
+
+  <span class="c1">// zero or more xpath highlight objects to lookup in the document</span>
+  <span class="c1">// and highlight with a single color.</span>
+  <span class="s2">&quot;xranges&quot;</span><span class="o">:</span> <span class="p">[],</span>
+
+  <span class="c1">// zero or more Regex objects to compile and</span>
+  <span class="c1">// execute to find spans to highlight with a single color.</span>
+  <span class="s2">&quot;regexes&quot;</span><span class="o">:</span> <span class="p">[]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where a Regex object is:</p>
+<div class="highlight-javascript"><div class="highlight"><pre><span class="p">{</span>
+  <span class="s2">&quot;regex&quot;</span><span class="o">:</span> <span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="c1">// e.g., &quot;[0-9]&quot;</span>
+  <span class="s2">&quot;flags&quot;</span><span class="o">:</span> <span class="s2">&quot;...&quot;</span>  <span class="c1">// e.g., &quot;i&quot; for case insensitive</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where an xpath highlight object is:</p>
+<div class="highlight-javascript"><div class="highlight"><pre><span class="p">{</span>
+  <span class="s2">&quot;range&quot;</span><span class="o">:</span> <span class="nx">XPathRange</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where an XpathRange object is:</p>
+<div class="highlight-javascript"><div class="highlight"><pre><span class="p">{</span>
+  <span class="s2">&quot;start&quot;</span><span class="o">:</span> <span class="nx">XPathOffset</span><span class="p">,</span>
+  <span class="s2">&quot;end&quot;</span><span class="o">:</span> <span class="nx">XPathOffset</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>where an XpathOffset object is:</p>
+<div class="highlight-javascript"><div class="highlight"><pre><span class="p">{</span>
+  <span class="s2">&quot;node&quot;</span><span class="o">:</span> <span class="s2">&quot;/html[1]/body[1]/p[1]/text()[2]&quot;</span><span class="p">,</span>
+  <span class="s2">&quot;idx&quot;</span><span class="o">:</span> <span class="mi">4</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>All of the <cite>strings</cite>, <cite>ranges</cite>, and <cite>regexes</cite> in a <cite>Highlight</cite>
+object should be given the same highlight color.  A <cite>Highlight</cite>
+object can provide values in any of the three <cite>strings</cite>, <cite>ranges</cite>,
+or <cite>regexes</cite> lists, and all should be highlighted.</p>
+</dd></dl>
+
 </div>
 <div class="section" id="indices-and-tables">
 <h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
@@ -99,6 +215,7 @@
   <h3><a href="#">Table Of Contents</a></h3>
   <ul>
 <li><a class="reference internal" href="#">Dossier Stack documentation</a></li>
+<li><a class="reference internal" href="#diffeo-highlighter-service">Diffeo Highlighter service</a></li>
 <li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
 </ul>
 

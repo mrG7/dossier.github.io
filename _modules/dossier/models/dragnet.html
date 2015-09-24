@@ -70,7 +70,7 @@
 <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">islice</span>
 <span class="kn">import</span> <span class="nn">kvlayer</span>
 <span class="kn">import</span> <span class="nn">dblogger</span>
-<span class="kn">import</span> <span class="nn">rejester</span>
+<span class="kn">import</span> <span class="nn">coordinate</span>
 <span class="kn">import</span> <span class="nn">many_stop_words</span>
 <span class="kn">import</span> <span class="nn">yakonfig</span>
 <span class="kn">import</span> <span class="nn">regex</span> <span class="kn">as</span> <span class="nn">re</span>
@@ -151,12 +151,12 @@
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">if</span> <span class="s">&#39;config&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">work_unit</span><span class="o">.</span><span class="n">spec</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">rejester</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ProgrammerError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ProgrammerError</span><span class="p">(</span>
             <span class="s">&#39;could not run dragnet without global config&#39;</span><span class="p">)</span>
 
     <span class="n">web_conf</span> <span class="o">=</span> <span class="n">Config</span><span class="p">()</span>
     <span class="n">unitconf</span> <span class="o">=</span> <span class="n">work_unit</span><span class="o">.</span><span class="n">spec</span><span class="p">[</span><span class="s">&#39;config&#39;</span><span class="p">]</span>
-    <span class="k">with</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">defaulted_config</span><span class="p">([</span><span class="n">rejester</span><span class="p">,</span> <span class="n">kvlayer</span><span class="p">,</span> <span class="n">dblogger</span><span class="p">,</span> <span class="n">web_conf</span><span class="p">],</span>
+    <span class="k">with</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">defaulted_config</span><span class="p">([</span><span class="n">coordinate</span><span class="p">,</span> <span class="n">kvlayer</span><span class="p">,</span> <span class="n">dblogger</span><span class="p">,</span> <span class="n">web_conf</span><span class="p">],</span>
                                    <span class="n">config</span><span class="o">=</span><span class="n">unitconf</span><span class="p">):</span>
 
         <span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>

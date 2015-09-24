@@ -13,6 +13,11 @@ Contents:
    dossier.models.rst
    dossier.web.rst
 
+Diffeo Highlighter service
+==========================
+
+.. autofunction:: dossier.models.web.routes.v1_highlights_post
+
 
 Indices and tables
 ==================

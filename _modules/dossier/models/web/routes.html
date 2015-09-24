@@ -1,0 +1,662 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>dossier.models.web.routes &mdash; dossier 0.3.4 documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.3.4',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="dossier 0.3.4 documentation" href="../../../../index.html" />
+    <link rel="up" title="Module code" href="../../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for dossier.models.web.routes</h1><div class="highlight"><pre>
+<span class="sd">&#39;&#39;&#39;web service endpoints for supporting SortingDesk</span>
+
+<span class="sd">.. This software is released under an MIT/X11 open source license.</span>
+<span class="sd">   Copyright 2015 Diffeo, Inc.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span><span class="p">,</span> <span class="n">division</span><span class="p">,</span> <span class="n">print_function</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">cStringIO</span> <span class="kn">import</span> <span class="n">StringIO</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">StringIO</span> <span class="kn">import</span> <span class="n">StringIO</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os.path</span> <span class="kn">as</span> <span class="nn">path</span>
+<span class="kn">import</span> <span class="nn">operator</span>
+<span class="kn">import</span> <span class="nn">urllib</span>
+
+<span class="kn">import</span> <span class="nn">bottle</span>
+<span class="kn">import</span> <span class="nn">cbor</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline</span> <span class="kn">import</span> <span class="n">cleanse</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline._clean_html</span> <span class="kn">import</span> <span class="n">uniform_html</span>
+<span class="kn">from</span> <span class="nn">streamcorpus_pipeline.offsets</span> <span class="kn">import</span> <span class="n">char_offsets_to_xpaths</span>
+<span class="kn">import</span> <span class="nn">regex</span> <span class="kn">as</span> <span class="nn">re</span>
+
+<span class="kn">import</span> <span class="nn">dblogger</span>
+<span class="kn">from</span> <span class="nn">dossier.fc</span> <span class="kn">import</span> <span class="n">StringCounter</span><span class="p">,</span> <span class="n">FeatureCollection</span>
+<span class="kn">from</span> <span class="nn">dossier.models</span> <span class="kn">import</span> <span class="n">etl</span>
+<span class="kn">from</span> <span class="nn">dossier.models.folder</span> <span class="kn">import</span> <span class="n">Folders</span>
+<span class="kn">from</span> <span class="nn">dossier.models.report</span> <span class="kn">import</span> <span class="n">ReportGenerator</span>
+<span class="kn">from</span> <span class="nn">dossier.models.subtopic</span> <span class="kn">import</span> <span class="n">subtopics</span><span class="p">,</span> <span class="n">subtopic_type</span><span class="p">,</span> <span class="n">typed_subtopic_data</span>
+<span class="kn">from</span> <span class="nn">dossier.models.web.config</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">import</span> <span class="nn">dossier.web.routes</span> <span class="kn">as</span> <span class="nn">routes</span>
+<span class="kn">from</span> <span class="nn">dossier.web.util</span> <span class="kn">import</span> <span class="n">fc_to_json</span>
+<span class="kn">import</span> <span class="nn">kvlayer</span>
+<span class="kn">import</span> <span class="nn">coordinate</span>
+<span class="kn">from</span> <span class="nn">coordinate.constants</span> <span class="kn">import</span> \
+    <span class="n">AVAILABLE</span><span class="p">,</span> <span class="n">BLOCKED</span><span class="p">,</span> <span class="n">PENDING</span><span class="p">,</span> <span class="n">FINISHED</span><span class="p">,</span> <span class="n">FAILED</span>
+<span class="kn">import</span> <span class="nn">yakonfig</span>
+
+
+<span class="n">app</span> <span class="o">=</span> <span class="n">bottle</span><span class="o">.</span><span class="n">Bottle</span><span class="p">()</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+<span class="n">web_static_path</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">__file__</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&#39;static&#39;</span><span class="p">)</span>
+<span class="n">bottle</span><span class="o">.</span><span class="n">TEMPLATE_PATH</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">web_static_path</span><span class="p">,</span> <span class="s">&#39;tpl&#39;</span><span class="p">))</span>
+
+
+<span class="nd">@app.get</span><span class="p">(</span><span class="s">&#39;/SortingQueue&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">example_sortingqueue</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">bottle</span><span class="o">.</span><span class="n">template</span><span class="p">(</span><span class="s">&#39;example-sortingqueue.html&#39;</span><span class="p">)</span>
+
+
+<span class="nd">@app.get</span><span class="p">(</span><span class="s">&#39;/SortingDesk&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">example_sortingdesk</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">bottle</span><span class="o">.</span><span class="n">template</span><span class="p">(</span><span class="s">&#39;example-sortingdesk.html&#39;</span><span class="p">)</span>
+
+
+<span class="nd">@app.get</span><span class="p">(</span><span class="s">&#39;/static/&lt;name:path&gt;&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v1_static</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">bottle</span><span class="o">.</span><span class="n">static_file</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">root</span><span class="o">=</span><span class="n">web_static_path</span><span class="p">)</span>
+
+
+<span class="n">DRAGNET_KEY</span> <span class="o">=</span> <span class="s">&#39;only-one-dragnet&#39;</span>
+
+<span class="nd">@app.post</span><span class="p">(</span><span class="s">&#39;/dossier/v1/dragnet&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v1_dragnet</span><span class="p">():</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">dragnet_status</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">status</span> <span class="ow">or</span> <span class="n">status</span> <span class="ow">in</span> <span class="p">(</span><span class="n">FINISHED</span><span class="p">,</span> <span class="n">FAILED</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;launching dragnet async work unit&#39;</span><span class="p">)</span>
+        <span class="n">conf</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">get_global_config</span><span class="p">(</span><span class="s">&#39;coordinate&#39;</span><span class="p">)</span>
+        <span class="n">tm</span> <span class="o">=</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">TaskMaster</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span>
+        <span class="n">tm</span><span class="o">.</span><span class="n">add_work_units</span><span class="p">(</span><span class="s">&#39;dragnet&#39;</span><span class="p">,</span> <span class="p">[(</span><span class="n">DRAGNET_KEY</span><span class="p">,</span> <span class="p">{})])</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;submitted&#39;</span><span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;pending&#39;</span><span class="p">}</span>
+
+<span class="nd">@app.get</span><span class="p">(</span><span class="s">&#39;/dossier/v1/dragnet&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v1_dragnet</span><span class="p">(</span><span class="n">kvlclient</span><span class="p">):</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">dragnet_status</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="n">PENDING</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;pending&#39;</span><span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">kvlclient</span><span class="o">.</span><span class="n">setup_namespace</span><span class="p">({</span><span class="s">&#39;dragnet&#39;</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,)})</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;dragnet&#39;</span><span class="p">,</span> <span class="p">(</span><span class="s">&#39;dragnet&#39;</span><span class="p">,)))</span>
+        <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="c">#logger.info(data)</span>
+            <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;failed&#39;</span><span class="p">}</span>
+
+<span class="k">def</span> <span class="nf">dragnet_status</span><span class="p">():</span>
+    <span class="n">conf</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">get_global_config</span><span class="p">(</span><span class="s">&#39;coordinate&#39;</span><span class="p">)</span>
+    <span class="n">tm</span> <span class="o">=</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">TaskMaster</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span>
+    <span class="n">wu_status</span> <span class="o">=</span> <span class="n">tm</span><span class="o">.</span><span class="n">get_work_unit_status</span><span class="p">(</span><span class="s">&#39;dragnet&#39;</span><span class="p">,</span> <span class="n">DRAGNET_KEY</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">wu_status</span><span class="p">:</span> <span class="k">return</span> <span class="bp">None</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">wu_status</span><span class="p">[</span><span class="s">&#39;status&#39;</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">status</span>
+
+
+<span class="nd">@app.get</span><span class="p">(</span><span class="s">&#39;/dossier/v1/folder/&lt;fid&gt;/report&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v1_folder_report</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">fid</span><span class="p">):</span>
+    <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Content-Disposition&#39;</span><span class="p">]</span> <span class="o">=</span> \
+        <span class="s">&#39;attachment; filename=&quot;report-</span><span class="si">%s</span><span class="s">.xlsx&quot;&#39;</span> <span class="o">%</span> <span class="n">fid</span>
+    <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;Content-Type&#39;</span><span class="p">]</span> <span class="o">=</span> \
+        <span class="s">&#39;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet&#39;</span>
+
+    <span class="n">folders</span> <span class="o">=</span> <span class="n">new_folders</span><span class="p">(</span><span class="n">kvlclient</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
+    <span class="n">gen</span> <span class="o">=</span> <span class="n">ReportGenerator</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">folders</span><span class="p">,</span> <span class="n">urllib</span><span class="o">.</span><span class="n">unquote</span><span class="p">(</span><span class="n">fid</span><span class="p">))</span>
+    <span class="n">body</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+    <span class="n">gen</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">body</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">body</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span>
+
+
+<span class="nd">@app.get</span><span class="p">(</span><span class="s">&#39;/dossier/v1/folder/&lt;fid&gt;/subfolder/&lt;sid&gt;/extract&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v1_folder_extract_get</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">):</span>
+    <span class="n">conf</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">get_global_config</span><span class="p">(</span><span class="s">&#39;coordinate&#39;</span><span class="p">)</span>
+    <span class="n">tm</span> <span class="o">=</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">TaskMaster</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">cbor</span><span class="o">.</span><span class="n">dumps</span><span class="p">((</span><span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">))</span>
+    <span class="n">wu_status</span> <span class="o">=</span> <span class="n">tm</span><span class="o">.</span><span class="n">get_work_unit_status</span><span class="p">(</span><span class="s">&#39;ingest&#39;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+    <span class="n">status</span> <span class="o">=</span> <span class="n">wu_status</span><span class="p">[</span><span class="s">&#39;status&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">status</span> <span class="ow">in</span> <span class="p">(</span><span class="n">AVAILABLE</span><span class="p">,</span> <span class="n">BLOCKED</span><span class="p">,</span> <span class="n">PENDING</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;pending&#39;</span><span class="p">}</span>
+    <span class="k">elif</span> <span class="n">status</span> <span class="ow">in</span> <span class="p">(</span><span class="n">FINISHED</span><span class="p">,):</span>
+        <span class="n">kvlclient</span><span class="o">.</span><span class="n">setup_namespace</span><span class="p">({</span><span class="s">&#39;openquery&#39;</span><span class="p">:</span> <span class="p">(</span><span class="nb">str</span><span class="p">,)})</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">kvlclient</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;openquery&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">key</span><span class="p">,)))</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="n">data</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;got data of len 1: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">data</span>
+            <span class="k">assert</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">data</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="n">data</span><span class="p">[</span><span class="s">&#39;state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;done&#39;</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;kvlclient: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Failed to get openquery data: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;failed&#39;</span><span class="p">}</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;failed&#39;</span><span class="p">}</span>
+
+
+<span class="nd">@app.post</span><span class="p">(</span><span class="s">&#39;/dossier/v1/folder/&lt;fid&gt;/subfolder/&lt;sid&gt;/extract&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v1_folder_extract_post</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">):</span>
+    <span class="n">conf</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">get_global_config</span><span class="p">(</span><span class="s">&#39;coordinate&#39;</span><span class="p">)</span>
+    <span class="n">tm</span> <span class="o">=</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">TaskMaster</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">cbor</span><span class="o">.</span><span class="n">dumps</span><span class="p">((</span><span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">))</span>
+    <span class="n">wu_status</span> <span class="o">=</span> <span class="n">tm</span><span class="o">.</span><span class="n">get_work_unit_status</span><span class="p">(</span><span class="s">&#39;ingest&#39;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">wu_status</span> <span class="ow">and</span> <span class="n">wu_status</span><span class="p">[</span><span class="s">&#39;status&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">(</span><span class="n">AVAILABLE</span><span class="p">,</span> <span class="n">BLOCKED</span><span class="p">,</span> <span class="n">PENDING</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;pending&#39;</span><span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;launching async work unit for </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">))</span>
+        <span class="n">conf</span> <span class="o">=</span> <span class="n">yakonfig</span><span class="o">.</span><span class="n">get_global_config</span><span class="p">(</span><span class="s">&#39;coordinate&#39;</span><span class="p">)</span>
+        <span class="n">tm</span> <span class="o">=</span> <span class="n">coordinate</span><span class="o">.</span><span class="n">TaskMaster</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span>
+        <span class="n">tm</span><span class="o">.</span><span class="n">add_work_units</span><span class="p">(</span><span class="s">&#39;ingest&#39;</span><span class="p">,</span> <span class="p">[(</span><span class="n">cbor</span><span class="o">.</span><span class="n">dumps</span><span class="p">((</span><span class="n">fid</span><span class="p">,</span> <span class="n">sid</span><span class="p">)),</span> <span class="p">{})])</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;state&#39;</span><span class="p">:</span> <span class="s">&#39;submitted&#39;</span><span class="p">}</span>
+
+
+<span class="nd">@app.put</span><span class="p">(</span><span class="s">&#39;/dossier/v1/feature-collection/&lt;cid&gt;&#39;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v1_fc_put</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">kvlclient</span><span class="p">,</span> <span class="n">tfidf</span><span class="p">,</span> <span class="n">cid</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Store a single feature collection.</span>
+
+<span class="sd">    The route for this endpoint is:</span>
+<span class="sd">    ``PUT /dossier/v1/feature-collections/&lt;content_id&gt;``.</span>
+
+<span class="sd">    ``content_id`` is the id to associate with the given feature</span>
+<span class="sd">    collection. The feature collection should be in the request</span>
+<span class="sd">    body serialized as JSON.</span>
+
+<span class="sd">    Alternatively, if the request&#39;s ``Content-type`` is</span>
+<span class="sd">    ``text/html``, then a feature collection is generated from the</span>
+<span class="sd">    HTML. The generated feature collection is then returned as a</span>
+<span class="sd">    JSON payload.</span>
+
+<span class="sd">    This endpoint returns status ``201`` upon successful</span>
+<span class="sd">    storage otherwise. An existing feature collection with id</span>
+<span class="sd">    ``content_id`` is overwritten.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">tfidf</span> <span class="o">=</span> <span class="n">tfidf</span> <span class="ow">or</span> <span class="bp">None</span>
+    <span class="k">if</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;content-type&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;text/html&#39;</span><span class="p">):</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">unquote</span><span class="p">(</span><span class="n">cid</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;|&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">fc</span> <span class="o">=</span> <span class="n">etl</span><span class="o">.</span><span class="n">create_fc_from_html</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">read</span><span class="p">(),</span> <span class="n">tfidf</span><span class="o">=</span><span class="n">tfidf</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;created FC for </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">cid</span><span class="p">)</span>
+        <span class="n">store</span><span class="o">.</span><span class="n">put</span><span class="p">([(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">)])</span>
+        <span class="k">return</span> <span class="n">fc_to_json</span><span class="p">(</span><span class="n">fc</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">fc</span> <span class="o">=</span> <span class="n">FeatureCollection</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="p">))</span>
+        <span class="n">keywords</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">subid</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">subid</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;subtopic&#39;</span><span class="p">):</span>
+                <span class="n">ty</span> <span class="o">=</span> <span class="n">subtopic_type</span><span class="p">(</span><span class="n">subid</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">ty</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;text&#39;</span><span class="p">,</span> <span class="s">&#39;manual&#39;</span><span class="p">):</span>
+                    <span class="c"># get the user selected string</span>
+                    <span class="n">data</span> <span class="o">=</span> <span class="n">typed_subtopic_data</span><span class="p">(</span><span class="n">fc</span><span class="p">,</span> <span class="n">subid</span><span class="p">)</span>
+                    <span class="nb">map</span><span class="p">(</span><span class="n">keywords</span><span class="o">.</span><span class="n">add</span><span class="p">,</span> <span class="n">cleanse</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+                    <span class="n">keywords</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">cleanse</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+
+        <span class="n">folders</span> <span class="o">=</span> <span class="n">Folders</span><span class="p">(</span><span class="n">kvlclient</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">fid</span><span class="p">,</span> <span class="n">sid</span> <span class="ow">in</span> <span class="n">folders</span><span class="o">.</span><span class="n">parent_subfolders</span><span class="p">(</span><span class="n">cid</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fid</span><span class="p">,</span> <span class="nb">unicode</span><span class="p">):</span>
+                <span class="n">fid</span> <span class="o">=</span> <span class="n">fid</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf8&#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="nb">unicode</span><span class="p">):</span>
+                <span class="n">sid</span> <span class="o">=</span> <span class="n">sid</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf8&#39;</span><span class="p">)</span>
+            <span class="n">keywords</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">cleanse</span><span class="p">(</span><span class="n">fid</span><span class="p">))</span>
+            <span class="n">keywords</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">cleanse</span><span class="p">(</span><span class="n">sid</span><span class="p">))</span>
+
+        <span class="n">fc</span><span class="p">[</span><span class="s">u&#39;keywords&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">StringCounter</span><span class="p">(</span><span class="n">keywords</span><span class="p">)</span>
+        <span class="n">store</span><span class="o">.</span><span class="n">put</span><span class="p">([(</span><span class="n">cid</span><span class="p">,</span> <span class="n">fc</span><span class="p">)])</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">201</span>
+
+        <span class="c">#return routes.v1_fc_put(request, response, lambda x: x, store, cid)</span>
+
+
+<span class="k">def</span> <span class="nf">new_folders</span><span class="p">(</span><span class="n">kvlclient</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
+    <span class="n">conf</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="s">&#39;annotator_id&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">query</span><span class="p">:</span>
+        <span class="n">conf</span><span class="p">[</span><span class="s">&#39;owner&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">query</span><span class="p">[</span><span class="s">&#39;annotator_id&#39;</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">Folders</span><span class="p">(</span><span class="n">kvlclient</span><span class="p">,</span> <span class="o">**</span><span class="n">conf</span><span class="p">)</span>
+
+
+<span class="n">feature_pretty_names</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s">&#39;ORGANIZATION&#39;</span><span class="p">,</span> <span class="s">&#39;Organizations&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;PERSON&#39;</span><span class="p">,</span> <span class="s">&#39;Persons&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;FACILITY&#39;</span><span class="p">,</span> <span class="s">&#39;Facilities&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;GPE&#39;</span><span class="p">,</span> <span class="s">&#39;Geo-political Entities&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;LOCATION&#39;</span><span class="p">,</span> <span class="s">&#39;Locations&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;SKYPE&#39;</span><span class="p">,</span> <span class="s">&#39;Skype Handles&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;PHONE&#39;</span><span class="p">,</span> <span class="s">&#39;Phone Numbers&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;email&#39;</span><span class="p">,</span> <span class="s">&#39;Email Addresses&#39;</span><span class="p">),</span>
+    <span class="p">(</span><span class="s">&#39;bowNP_unnorm&#39;</span><span class="p">,</span> <span class="s">&#39;Noun Phrases&#39;</span><span class="p">),</span>
+    <span class="p">]</span>
+
+<span class="nd">@app.post</span><span class="p">(</span><span class="s">&#39;/dossier/v1/highlighter/&lt;cid&gt;&#39;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">v0_highlighter_post</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">tfidf</span><span class="p">,</span> <span class="n">cid</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Obtain highlights for a document POSTed as the body, which is the</span>
+<span class="sd">    pre-design-thinking structure of the highlights API.  See v1 below.</span>
+
+<span class="sd">    NB: This end point will soon be deleted.</span>
+
+<span class="sd">    The route for this endpoint is:</span>
+<span class="sd">    ``POST /dossier/v0/highlighter/&lt;cid&gt;``.</span>
+
+<span class="sd">    ``content_id`` is the id to associate with the given feature</span>
+<span class="sd">    collection. The feature collection should be in the request</span>
+<span class="sd">    body serialized as JSON.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;got </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">cid</span><span class="p">)</span>
+    <span class="n">tfidf</span> <span class="o">=</span> <span class="n">tfidf</span> <span class="ow">or</span> <span class="bp">None</span>
+    <span class="n">content_type</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;content-type&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">content_type</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;text/html&#39;</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s">&#39;content-type=</span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">content_type</span><span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">415</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;content_type=</span><span class="si">%r</span><span class="s"> and should be text/html&#39;</span> <span class="o">%</span> <span class="n">content_type</span><span class="p">}}</span>
+
+    <span class="n">url</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">unquote</span><span class="p">(</span><span class="n">cid</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;|&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">body</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">420</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;empty body&#39;</span><span class="p">}}</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;parsing </span><span class="si">%d</span><span class="s"> bytes for url: </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">),</span> <span class="n">url</span><span class="p">)</span>
+    <span class="n">fc</span> <span class="o">=</span> <span class="n">etl</span><span class="o">.</span><span class="n">create_fc_from_html</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span> <span class="n">tfidf</span><span class="o">=</span><span class="n">tfidf</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fc</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s">&#39;failed to get FC using </span><span class="si">%d</span><span class="s"> bytes from </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">),</span> <span class="n">url</span><span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">506</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;FC not generated for that content&#39;</span><span class="p">}}</span>
+    <span class="n">highlights</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">feature_name</span><span class="p">,</span> <span class="n">pretty_name</span> <span class="ow">in</span> <span class="n">feature_pretty_names</span><span class="p">:</span>
+        <span class="c"># Each type of string is</span>
+        <span class="k">if</span> <span class="n">feature_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">:</span> <span class="k">continue</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">feature_name</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">highlights</span><span class="p">[</span><span class="n">pretty_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">phrase</span><span class="p">,</span> <span class="n">count</span> <span class="o">/</span> <span class="n">total</span><span class="p">,</span> <span class="p">[],</span> <span class="p">[])</span>
+            <span class="k">for</span> <span class="n">phrase</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">feature_name</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">)]</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%r</span><span class="s"> and </span><span class="si">%d</span><span class="s"> keys&#39;</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">highlights</span><span class="p">[</span><span class="n">pretty_name</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s">&#39;highlights&#39;</span><span class="p">:</span> <span class="n">highlights</span><span class="p">}</span>
+
+
+<span class="nd">@app.post</span><span class="p">(</span><span class="s">&#39;/dossier/v1/highlights&#39;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+<div class="viewcode-block" id="v1_highlights_post"><a class="viewcode-back" href="../../../../index.html#dossier.models.web.routes.v1_highlights_post">[docs]</a><span class="k">def</span> <span class="nf">v1_highlights_post</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">tfidf</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Obtain highlights for a document POSTed inside a JSON object.</span>
+
+<span class="sd">    Get our Diffeo Highlighter browser extension here:</span>
+<span class="sd">    https://chrome.google.com/webstore/detail/jgfcplgdmjkdepnmbdkmgohaldaiplpo</span>
+
+<span class="sd">    The route for this endpoint is:</span>
+<span class="sd">    ``POST /dossier/v1/highlights``.</span>
+
+<span class="sd">    The expected input structure is a JSON encoded string of an</span>
+<span class="sd">    object with these keys:</span>
+
+<span class="sd">    .. code-block:: javascript</span>
+
+<span class="sd">        {</span>
+<span class="sd">          // only text/html is supported at this time; hopefully PDF.js</span>
+<span class="sd">          // enables this to support PDF rendering too.</span>
+<span class="sd">          &quot;content-type&quot;: &quot;text/html&quot;,</span>
+
+<span class="sd">          // URL of the page (after resolving all redirects)</span>
+<span class="sd">          &quot;content-location&quot;: &quot;http://...&quot;,</span>
+
+<span class="sd">          // If provided by the original host, this will be populated,</span>
+<span class="sd">          // otherwise it is empty.</span>
+<span class="sd">          &quot;last-modified&quot;: &quot;datetime string or empty string&quot;,</span>
+
+<span class="sd">          // full page contents obtained by Javascript in the browser</span>
+<span class="sd">          // extension accessing `document.documentElement.innerHTML`.</span>
+<span class="sd">          // This must be UTF-8 encoded.</span>
+<span class="sd">          // N.B. This needs experimentation to figure out whether the</span>
+<span class="sd">          // browser will always encode this as Unicode.</span>
+<span class="sd">          &quot;body&quot;: &quot;... the body content ...&quot;,</span>
+<span class="sd">        }</span>
+
+
+<span class="sd">    The output structure is a JSON UTF-8 encoded string of an</span>
+<span class="sd">    object with these keys:</span>
+
+<span class="sd">    .. code-block:: javascript</span>
+
+<span class="sd">      {</span>
+<span class="sd">        &quot;highlights&quot;: [Highlight, Highlight, ...]</span>
+<span class="sd">      }</span>
+
+
+<span class="sd">    where a `Highlight` object has this structure:</span>
+
+<span class="sd">    .. code-block:: javascript</span>
+
+<span class="sd">      {</span>
+<span class="sd">        // float in the range [0, 1]</span>
+<span class="sd">        &quot;score&quot;: 0.7</span>
+
+<span class="sd">        // a string presented with a check box inside the options</span>
+<span class="sd">        // bubble when the user clicks the extension icon to choose</span>
+<span class="sd">        // which categories of highlights should be displayed.</span>
+<span class="sd">        &quot;category&quot;: &quot;Organization&quot;,</span>
+
+<span class="sd">        // `queries` are strings that are to be presented as</span>
+<span class="sd">        // suggestions to the user, and the extension enables the user</span>
+<span class="sd">        // to click any of the configured search engines to see</span>
+<span class="sd">        // results for a selected query string.</span>
+<span class="sd">        &quot;queries&quot;: [],</span>
+
+<span class="sd">        // zero or more strings to match in the document and highlight</span>
+<span class="sd">        // with a single color.</span>
+<span class="sd">        &quot;strings&quot;: [],</span>
+
+<span class="sd">        // zero or more xpath highlight objects to lookup in the document</span>
+<span class="sd">        // and highlight with a single color.</span>
+<span class="sd">        &quot;xranges&quot;: [],</span>
+
+<span class="sd">        // zero or more Regex objects to compile and</span>
+<span class="sd">        // execute to find spans to highlight with a single color.</span>
+<span class="sd">        &quot;regexes&quot;: []</span>
+<span class="sd">      }</span>
+
+<span class="sd">    where a Regex object is:</span>
+
+<span class="sd">    .. code-block:: javascript</span>
+
+<span class="sd">      {</span>
+<span class="sd">        &quot;regex&quot;: &quot;...&quot;, // e.g., &quot;[0-9]&quot;</span>
+<span class="sd">        &quot;flags&quot;: &quot;...&quot;  // e.g., &quot;i&quot; for case insensitive</span>
+<span class="sd">      }</span>
+
+<span class="sd">    where an xpath highlight object is:</span>
+
+<span class="sd">    .. code-block:: javascript</span>
+
+<span class="sd">      {</span>
+<span class="sd">        &quot;range&quot;: XPathRange</span>
+<span class="sd">      }</span>
+
+<span class="sd">    where an XpathRange object is:</span>
+
+<span class="sd">    .. code-block:: javascript</span>
+
+<span class="sd">      {</span>
+<span class="sd">        &quot;start&quot;: XPathOffset,</span>
+<span class="sd">        &quot;end&quot;: XPathOffset</span>
+<span class="sd">      }</span>
+
+<span class="sd">    where an XpathOffset object is:</span>
+
+<span class="sd">    .. code-block:: javascript</span>
+
+<span class="sd">      {</span>
+<span class="sd">        &quot;node&quot;: &quot;/html[1]/body[1]/p[1]/text()[2]&quot;,</span>
+<span class="sd">        &quot;idx&quot;: 4,</span>
+<span class="sd">      }</span>
+
+<span class="sd">    All of the `strings`, `ranges`, and `regexes` in a `Highlight`</span>
+<span class="sd">    object should be given the same highlight color.  A `Highlight`</span>
+<span class="sd">    object can provide values in any of the three `strings`, `ranges`,</span>
+<span class="sd">    or `regexes` lists, and all should be highlighted.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">tfidf</span> <span class="o">=</span> <span class="n">tfidf</span> <span class="ow">or</span> <span class="bp">None</span>
+    <span class="n">content_type</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;content-type&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">content_type</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;application/json&#39;</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s">&#39;content-type=</span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">content_type</span><span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">415</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;content_type=</span><span class="si">%r</span><span class="s"> and should be &#39;</span>
+                           <span class="s">&#39;application/json&#39;</span> <span class="o">%</span> <span class="n">content_type</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+
+    <span class="n">body</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">400</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;empty body&#39;</span><span class="p">}}</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">body</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">400</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="s">&#39;message&#39;</span><span class="p">:</span>
+                <span class="s">&#39;failed to read JSON body: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">exc</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">400</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+                <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;JSON payload deserialized to other than &#39;</span>
+                           <span class="s">&#39;an object: </span><span class="si">%r</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+
+    <span class="n">expected_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([</span>
+        <span class="s">&#39;content-type&#39;</span><span class="p">,</span> <span class="s">&#39;content-location&#39;</span><span class="p">,</span> <span class="s">&#39;last-modified&#39;</span><span class="p">,</span> <span class="s">&#39;body&#39;</span><span class="p">,</span>
+    <span class="p">])</span>
+    <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">!=</span> <span class="n">expected_keys</span><span class="p">:</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">400</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+                <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;other than expected keys in JSON object. &#39;</span>
+                           <span class="s">&#39;Expected </span><span class="si">%r</span><span class="s"> and received </span><span class="si">%r</span><span class="s">&#39;</span>
+                           <span class="o">%</span> <span class="p">(</span><span class="n">expected_keys</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s">&#39;content-location&#39;</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">400</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+                <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;received invalid content-location=</span><span class="si">%r</span><span class="s">&#39;</span>
+                           <span class="o">%</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;content-location&#39;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s">&#39;body&#39;</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">400</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">6</span><span class="p">,</span>
+                <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;received too little body=</span><span class="si">%r</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;body&#39;</span><span class="p">],</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+
+    <span class="n">fc</span> <span class="o">=</span> <span class="n">etl</span><span class="o">.</span><span class="n">create_fc_from_html</span><span class="p">(</span>
+        <span class="n">data</span><span class="p">[</span><span class="s">&#39;content-location&#39;</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;body&#39;</span><span class="p">],</span> <span class="n">tfidf</span><span class="o">=</span><span class="n">tfidf</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fc</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s">&#39;failed to get FC using </span><span class="si">%d</span><span class="s"> bytes from </span><span class="si">%r</span><span class="s">&#39;</span><span class="p">,</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">),</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;content-location&#39;</span><span class="p">])</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="mi">500</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s">&#39;error&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s">&#39;code&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="s">&#39;FC not generated for that content&#39;</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">}</span>
+    <span class="n">highlights</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">feature_name</span><span class="p">,</span> <span class="n">pretty_name</span> <span class="ow">in</span> <span class="n">feature_pretty_names</span><span class="p">:</span>
+        <span class="c"># Each type of string is</span>
+        <span class="k">if</span> <span class="n">feature_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">feature_name</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">bow</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">fc</span><span class="p">[</span><span class="n">feature_name</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">reverse</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">highlights</span><span class="p">[</span><span class="n">pretty_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[(</span><span class="n">phrase</span><span class="p">,</span> <span class="n">count</span> <span class="o">/</span> <span class="n">total</span><span class="p">)</span>
+                                   <span class="k">for</span> <span class="n">phrase</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">bow</span><span class="p">]</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%r</span><span class="s"> and </span><span class="si">%d</span><span class="s"> keys&#39;</span><span class="p">,</span>
+                    <span class="n">feature_name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">highlights</span><span class="p">[</span><span class="n">pretty_name</span><span class="p">]))</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="s">&#39;highlights&#39;</span><span class="p">:</span> <span class="n">build_highlight_objects</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s">&#39;body&#39;</span><span class="p">],</span> <span class="n">highlights</span><span class="p">)}</span>
+
+</div>
+<span class="k">def</span> <span class="nf">build_highlight_objects</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">highlights</span><span class="p">,</span> <span class="n">uniformize_html</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;converts a dict of pretty_name --&gt; [tuple(string, score), ...] to</span>
+<span class="sd">    `Highlight` objects as specified above.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">uniformize_html</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">html</span> <span class="o">=</span> <span class="n">uniform_html</span><span class="p">(</span><span class="n">html</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">,</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;failed to get uniform_html(</span><span class="si">%d</span><span class="s"> bytes) --&gt; </span><span class="si">%s</span><span class="s">&#39;</span><span class="p">,</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="n">html</span><span class="p">),</span> <span class="n">exc</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="n">html</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="n">highlight_objects</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">category</span><span class="p">,</span> <span class="n">phrase_scores</span> <span class="ow">in</span> <span class="n">highlights</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">phrase</span><span class="p">,</span> <span class="n">score</span><span class="p">)</span> <span class="ow">in</span> <span class="n">phrase_scores</span><span class="p">:</span>
+            <span class="n">hl</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+                <span class="n">score</span><span class="o">=</span><span class="n">score</span><span class="p">,</span>
+                <span class="n">category</span><span class="o">=</span><span class="n">category</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">ranges</span> <span class="o">=</span> <span class="n">make_xpath_ranges</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">phrase</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">ranges</span><span class="p">:</span>
+                <span class="n">hl</span><span class="p">[</span><span class="s">&#39;xranges&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[{</span><span class="s">&#39;range&#39;</span><span class="p">:</span> <span class="n">r</span><span class="p">}</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">ranges</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">phrase</span> <span class="ow">in</span> <span class="n">html</span><span class="p">:</span>
+                <span class="n">hl</span><span class="p">[</span><span class="s">&#39;strings&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">phrase</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">hl</span><span class="p">[</span><span class="s">&#39;regexes&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[{</span>
+                    <span class="s">&#39;regex&#39;</span><span class="p">:</span> <span class="n">phrase</span><span class="p">,</span>
+                    <span class="s">&#39;flags&#39;</span><span class="p">:</span> <span class="s">&#39;i&#39;</span><span class="p">,</span>
+                <span class="p">}]</span>
+            <span class="n">highlight_objects</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hl</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">highlight_objects</span>
+
+
+<span class="k">def</span> <span class="nf">make_xpath_ranges</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">phrase</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Given a HTML string and a `phrase`, build a regex to find offsets</span>
+<span class="sd">    for the phrase, and then build a list of `XPathRange` objects for</span>
+<span class="sd">    it.  If this fails, return empty list.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">html</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">phrase</span><span class="p">,</span> <span class="nb">unicode</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">phrase</span> <span class="o">=</span> <span class="n">phrase</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;utf8&#39;</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;failed </span><span class="si">%r</span><span class="s">.decode(&quot;utf8&quot;)&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">phrase_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+        <span class="n">phrase</span><span class="p">,</span> <span class="n">flags</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">UNICODE</span> <span class="o">|</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span> <span class="o">|</span> <span class="n">re</span><span class="o">.</span><span class="n">MULTILINE</span><span class="p">)</span>
+    <span class="n">spans</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">phrase_re</span><span class="o">.</span><span class="n">finditer</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">overlapped</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="n">spans</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">span</span><span class="p">())</span>  <span class="c"># a list of tuple(start, end) char indexes</span>
+
+    <span class="c"># now run fancy aligner magic to get xpath info and format them as</span>
+    <span class="c"># XPathRange per above</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">xpath_ranges</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">char_offsets_to_xpaths</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">spans</span><span class="p">))</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;failed to get xpaths&#39;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">ranges</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">xpath_range</span> <span class="ow">in</span> <span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">xpath_ranges</span><span class="p">):</span>
+        <span class="n">ranges</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span>
+            <span class="n">start</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">node</span><span class="o">=</span><span class="n">xpath_range</span><span class="o">.</span><span class="n">start_xpath</span><span class="p">,</span>
+                       <span class="n">idx</span><span class="o">=</span><span class="n">xpath_range</span><span class="o">.</span><span class="n">start_offset</span><span class="p">),</span>
+            <span class="n">end</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">node</span><span class="o">=</span><span class="n">xpath_range</span><span class="o">.</span><span class="n">end_xpath</span><span class="p">,</span>
+                     <span class="n">idx</span><span class="o">=</span><span class="n">xpath_range</span><span class="o">.</span><span class="n">end_offset</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="n">ranges</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">dossier 0.3.4 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2014, Diffeo, Inc..
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>
